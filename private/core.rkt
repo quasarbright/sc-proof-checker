@@ -32,6 +32,7 @@
   [check-proof (-> context? formula? proof-tree? inference-tree?)]
   ; context operations
   [assert-in-context (->* (formula?) (context? symbol?) void?)]
+  [assert-context-has-theory (->* (theory/c) (context? symbol?) void?)]
   [in-context? (->* (formula?) (context?) any/c)]
   [find-in-context (->* ((-> formula? any/c)) (context?) (or/c #f formula?))]
   [extend-context (->* (context?) #:rest (listof formula?) context?)]
@@ -69,7 +70,8 @@
   (match p
     [(? symbol?) #t]
     [(list (? symbol?) ps ...)
-     (for/and ([p ps]) (formula? p))]))
+     (for/and ([p ps]) (formula? p))]
+    [_ #f]))
 
 ; These are lists, where forall is 'forall
 
@@ -215,6 +217,7 @@
              [operators (listof operator/c)]
              [theorems (and/c (listof formula?))]
              ; TODO operator check?
+             ; TODO remove this and enforce it in add-theory! instead
              #:inv (axioms theorems) (for/and ([theorem theorems])
                                        (subset? (free-vars theorem)
                                                 (free-vars/context (apply context axioms))))))
@@ -265,6 +268,14 @@
     (if who-sym
         (error who-sym "~v not found in context ~v" p ctx)
         (error "~v not found in context ~v" p ctx))))
+
+; Theory {Context} -> Void
+; Assert that that a theory's axioms and theorems are available in the context.
+(define (assert-context-has-theory thry [ctx (current-context)] [who-sym (object-name (current-rule))])
+  (unless (subcontext? (theory->context thry) ctx)
+    (if who-sym
+        (error who-sym "expected access to theory")
+        (error "expected access to theory"))))
 
 ; Formula Context -> boolean?
 (define (in-context? p [ctx (current-context)])

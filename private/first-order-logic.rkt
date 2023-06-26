@@ -7,6 +7,8 @@
          "./core.rkt"
          "./sugar.rkt")
 
+(module+ test (require rackunit))
+
 (provide
  ; core operators
  (contract-out
@@ -187,7 +189,7 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallL p)
+    (ForallL bottom p)
     I)))
 
 ; ---------- TopR
@@ -255,3 +257,165 @@
     (=>L (=> p q))
     I
     I)))
+
+(module+ test
+  ; modus ponens using checked =>L
+  (check-not-exn
+   (lambda ()
+     (fresh
+      (p q)
+      (check-proof
+       (context p (=> p q)) q
+       (Branch
+        (=>L (=> p q))
+        I
+        I)))))
+  ; proof by contradiction
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      ; there does not exists something that is not equal to itself
+      '() (neg (exists x (neg (= x x))))
+      (Sequence
+       =>R
+       ; assume there does exist such a thing
+       (ExistsL
+        ([(exists x (neg (= x x))) x])
+        (Branch
+         (=>L (neg (= x x)))
+         =R
+         BottomL))))))
+  ; dual of proof by contradiction just for fun
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      ; there does not exists something that is not equal to itself
+      '() (forall x (= x x))
+      (ForallR
+       (x)
+       =R))))
+  ; proof by contradiction with NotR
+  ; Pretty much the same thing with two nots!
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      ; there does not exists something that is not equal to itself
+      '() (neg (exists x (neg (= x x))))
+      (Sequence
+       NotR
+       (ExistsL
+        ([(exists x (neg (= x x))) x])
+        (Sequence
+         (NotL (= x x))
+         =R))))))
+  ; contradiction theorem
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      '() (forall (p q) (=> (conj p (neg p))
+                            q))
+      (ForallR
+       (p q)
+       (Sequence
+        =>R
+        AndL
+        (Branch
+         (=>L (neg p))
+         I
+         BottomL))))))
+  ; absurd
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      '() (forall p (=> bottom p))
+      (ForallR
+       (p)
+       (Sequence
+        =>R
+        (ForallL bottom p)
+        I)))))
+  ; dual of absurd, idk what you'd call it
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      '() (forall p (=> p top))
+      (ForallR
+       (p)
+       (Sequence
+        =>R
+        (ExistsR p)
+        I)))))
+  ; transitive property of equality
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      '() (forall (a b c) (=> (conj (= a b) (= b c))
+                              (= a c)))
+      (ForallR
+       (a b c)
+       (Sequence
+        =>R
+        AndL
+        (=L a b)
+        (=L b c)
+        =R)))))
+  ; modus ponens theorem
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      '() (forall (p q) (=> (conj p (=> p q)) q))
+      (ForallR
+       (p q)
+       (Sequence
+        =>R
+        AndL
+        CR
+        (Branch
+         (=>L^ (=> p q))
+         (Sequence
+          OrR1
+          I)
+         I))))))
+  ; (p => q) => ((exists x p) => (exists y q))
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      (context (exists (x y) (conj x y))) (exists z z)
+      (ExistsL
+       ([(exists (x y) (conj x y)) w]
+        ; notice how you have access to w here
+        [(exists y (conj w y)) w])
+       (Sequence
+        AndL
+        (ExistsR w)
+        I)))))
+  ; modus ponens theorem
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      '() (forall p (forall q (=> (conj p (=> p q)) q)))
+      (fresh
+       (p q)
+       (Sequence
+        (ForallR
+         (p q)
+         (Sequence
+          =>R
+          AndL
+          CR
+          (Branch
+           (=>L^ (=> p q))
+           (Sequence
+            OrR1
+            I)
+           I))))))))
+  ; absurd
+  (check-not-exn
+   (lambda ()
+     (fresh
+      (a)
+      (check-proof
+       (context (forall x x)) a
+       (Sequence
+        (ForallL (forall x x) a)
+        I))))))

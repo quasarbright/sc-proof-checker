@@ -228,6 +228,18 @@
        (ExistsL p-exists x)
        (ExistsL* (pair ...) proof)))]))
 
+; left off here
+#;
+(define-syntax ForallL*
+  (syntax-rules ()
+    [(_ p-forall (t) proof) (Sequence (ForallL p-forall t) proof)]
+    [(_ p-forall (t0 t ...) proof)
+     (let ([p p-forall])
+       (Sequence
+        (ForallL p t0)
+        (match-formula p
+          [`()])))]))
+
 ; (forall x p-body) in ctx    ctx,p-body[t/x] |- p
 ; ------------------------------------------------
 ; ctx |- p
@@ -248,7 +260,7 @@
 ; Used to view the context and formula to prove.
 ; Can be used for an interactive experience.
 (define-rule (Debug ctx p)
-  (displayln (format "~v |- ~v" ctx p))
+  (displayln (format "~v \n|- ~v" ctx p))
   '())
 
 ; -------- TrustMe
