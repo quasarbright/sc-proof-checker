@@ -35,7 +35,8 @@
   [ExistsR (-> formula? rule?)])
  (rename-out
   [ForallR* ForallR]
-  [ExistsL* ExistsL]))
+  [ExistsL* ExistsL])
+ define-theorem!)
 
 ; utilities for defining rules
 
@@ -274,5 +275,5 @@
 (define-syntax-rule (define-theorem! name thry p proof-tree)
   (define name
     (begin
-      (theory-add-theorem! thry (list (theory->context thry) p proof-tree))
+      (theory-add-theorem! thry (list (/- (theory->context thry) p) proof-tree))
       p)))
