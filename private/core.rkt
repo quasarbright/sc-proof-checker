@@ -337,7 +337,7 @@
 
 ; Context -> (listof symbol?)
 (define (free-vars/context ctx)
-  (apply set-union (for/list ([p ctx]) (free-vars p))))
+  (apply set-union '() (for/list ([p ctx]) (free-vars p))))
 
 ; Formula -> Any
 ; Are there no free vars in the formula?
@@ -443,7 +443,7 @@
      (unless (subcontext? ctx (theory->context thry))
        (error 'theory-add-theorem "proof of theorem must be valid under theory's context"))
      (begin0 (check-proof ctx p tree)
-       (set-theory-theorems! thry (cons (theory-theorems thry) p)))]))
+       (set-theory-theorems! thry (cons p (theory-theorems thry))))]))
 
 ; Theory -> Context
 (define (theory->context thry)
