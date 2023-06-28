@@ -25,12 +25,12 @@
 ; every non-empty set x contains a member y such that x and y are disjoint sets
 (define regularity
   (forall x (=> (exists a (in a x))
-                (exists y (and (in y x)
-                               (neg (exists z (and (in z y) (in z x)))))))))
+                (exists y (conj (in y x)
+                               (neg (exists z (conj (in z y) (in z x)))))))))
 
 (define-syntax-rule (is-specification? s member superset predicate)
   (forall (member) (<=> (in member s)
-                        (and (in member superset) predicate))))
+                        (conj (in member superset) predicate))))
 
 ; --------------------------------------------------------------- Specification
 ; ctx |- (exists y (forall x (<=> (in x y) (and (in x z) pred))))
@@ -40,16 +40,16 @@
   '())
 
 (define pairing
-  (forall (x y) (exists (z) (and (in x z) (in y z)))))
+  (forall (x y) (exists (z) (conj (in x z) (in y z)))))
 
 (define axiom-of-union
-  (forall F (exists A (forall Y (forall x (=> (and (in x Y)
+  (forall F (exists A (forall Y (forall x (=> (conj (in x Y)
                                                    (in Y F))
                                               (in x A)))))))
 
 (define (self-union F) `(self-union ,F))
 (define (is-self-union? F uF)
-  (forall (Y x) (<=> (in x uF) (and (in x Y) (in Y F)))))
+  (forall (Y x) (<=> (in x uF) (conj (in x Y) (in Y F)))))
 ; TODO unique existence theorem
 ; TODO axiom
 ; TODO operator
@@ -74,7 +74,7 @@
 ; TODO operator
 
 (define axiom-of-infinity
-  (exists X (and (exists e (and (null-set? e) (in e X)))
+  (exists X (conj (exists e (conj (null-set? e) (in e X)))
                  (forall y (=> (in y X) (in (S y) X))))))
 
 (define (is-subset? x y)
@@ -138,9 +138,57 @@
   zfc (forall x (exists! sx (is-singleton? x sx)))
   (ForallR
    (x)
-   (Cuts ([(exists xx (and (in x xx) (in x xx))) 'todo]
-          ; TODO ExistsL xx
-          [(exists sx (is-specification? sx e xx (= e x))) 'todo])
-         (Sequence
-          (ExistsR sx)
-          Debug))))
+   (Cuts
+    ([(exists xx (conj (in x xx) (in x xx)))
+      ; actually, use pairing
+      (Sequence
+       (ForallL pairing x)
+       (ForallL (forall y (exists z (conj (in x z) (in y z)))) x)
+       I)])
+    (Sequence
+     (ExistsL
+      ([(exists xx (conj (in x xx) (in x xx))) xx])
+      (Cuts
+       ([(exists sx (is-specification? sx e xx (= x e))) Specification])
+       (ExistsL
+        ([(exists sx (is-specification? sx e xx (= x e))) sx])
+        (Sequence
+         (ExistsR sx)
+         (ForallR (y) ; same as sx
+                  (Branch
+                   AndR
+                   (Sequence
+                    =>R
+                    Debug)
+                   (Sequence
+                    =>R
+                    (=L y sx)
+                    Debug)))
+         )))
+              #;
+              Specification)))))
+
+#;#;
+(let ([x:31 'x:31])
+ (exists
+  sx:28
+  (forall
+   y:29
+   (and (=> (is-singleton? x:31 y:29)
+            (= sx:28 y:29))
+        (=> (= sx:28 y:29)
+            (is-singleton? x:31 y:29))))))
+
+(forall e:41 (and (=> (in e:41 sx:39) (and (in e:41 xx:35) (= x:31 e:41)))
+                  (=> (and (in e:41 xx:35) (= x:31 e:41)) (in e:41 sx:39))))
+#;
+(forall y:29 (and (=> (forall
+                       e:30
+                       (and (=> (in e:30 y:29) (= e:30 x:31))
+                            (=> (= e:30 x:31) (in e:30 y:29))))
+                      (= sx:39 y:29))
+                  (=> (= sx:39 y:29)
+                      (forall
+                       e:30
+                       (and (=> (in e:30 y:29) (= e:30 x:31))
+                            (=> (= e:30 x:31) (in e:30 y:29)))))))
