@@ -59,8 +59,7 @@
 (define (singleton x) `(singleton ,x))
 (define (is-singleton? x sx) (forall e (<=> (in e sx) (= e x))))
 (define axiom-for-singleton (forall x (is-singleton? x (singleton x))))
-; TODO unique existence theorem
-; TODO operator
+
 (define (U x y) `(U ,x ,y))
 (define (is-binary-union? x y u)
   (forall e (<=> (in e u) (or (in e x) (in e y)))))
@@ -169,7 +168,19 @@
                        =>R
                        ; prove z = x, then use e = x => e in y
                        (Cuts
-                        ([(= z x) Debug])
+                        ([(= z x)
+                          ; use the definition of sx
+                          (Sequence
+                           (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
+                                    z)
+                           AndL
+                           (Branch
+                            (=>L (=> (in z sx) (conj (in z xx) (= x z))))
+                            I
+                            (Sequence
+                             AndL
+                             (=L x z)
+                             =R)))])
                         (Sequence
                          (ForallL (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
                                   z)
@@ -179,7 +190,35 @@
                           I
                           I))))
                       ; prove y subset sx
-                      TrustMe)))
+                      (Sequence
+                       =>R
+                       ; ctx can give you (= z x)
+                       ; then you can use the definition of sx to prove membership
+                       (Cuts
+                        ([(= z x)
+                          (Sequence
+                           (ForallL (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
+                                    z)
+                           AndL
+                           (Branch
+                            (=>L (=> (in z y) (= z x)))
+                            I
+                            I))])
+                        (Sequence
+                         (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e)))
+                                                  (=> (conj (in e xx) (= x e)) (in e sx))))
+                                  z)
+                         AndL
+                         (Branch
+                          (=>L (=> (conj (in z xx) (= x z)) (in z sx)))
+                          ; prove antecedent
+                          (Sequence
+                           (=L z x)
+                           (Branch
+                            AndR
+                            I; (in x xx)
+                            =R))
+                          I)))))))
                    (Sequence
                     =>R
                     (=L y sx)
