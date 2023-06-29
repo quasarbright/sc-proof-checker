@@ -261,7 +261,10 @@
 ; Used to view the context and formula to prove.
 ; Can be used for an interactive experience.
 (define-rule (Debug ctx p)
-  (displayln (format "~v \n|- ~v" ctx p))
+  (displayln "given")
+  (for ([p ctx]) (displayln p))
+  (displayln "prove")
+  (displayln p)
   '())
 
 ; -------- TrustMe

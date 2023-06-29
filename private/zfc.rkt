@@ -159,36 +159,59 @@
                    AndR
                    (Sequence
                     =>R
-                    Debug)
+                    Extensionality
+                    (ForallR
+                     (z)
+                     (Branch
+                      AndR
+                      ; prove sx subset y
+                      (Sequence
+                       =>R
+                       ; prove z = x, then use e = x => e in y
+                       (Cuts
+                        ([(= z x) Debug])
+                        (Sequence
+                         (ForallL (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
+                                  z)
+                         AndL
+                         (Branch
+                          (=>L (=> (= z x) (in z y)))
+                          I
+                          I))))
+                      ; prove y subset sx
+                      TrustMe)))
                    (Sequence
                     =>R
                     (=L y sx)
-                    Debug)))
-         )))
-              #;
-              Specification)))))
-
-#;#;
-(let ([x:31 'x:31])
- (exists
-  sx:28
-  (forall
-   y:29
-   (and (=> (is-singleton? x:31 y:29)
-            (= sx:28 y:29))
-        (=> (= sx:28 y:29)
-            (is-singleton? x:31 y:29))))))
-
-(forall e:41 (and (=> (in e:41 sx:39) (and (in e:41 xx:35) (= x:31 e:41)))
-                  (=> (and (in e:41 xx:35) (= x:31 e:41)) (in e:41 sx:39))))
-#;
-(forall y:29 (and (=> (forall
-                       e:30
-                       (and (=> (in e:30 y:29) (= e:30 x:31))
-                            (=> (= e:30 x:31) (in e:30 y:29))))
-                      (= sx:39 y:29))
-                  (=> (= sx:39 y:29)
-                      (forall
-                       e:30
-                       (and (=> (in e:30 y:29) (= e:30 x:31))
-                            (=> (= e:30 x:31) (in e:30 y:29)))))))
+                    (ForallR
+                     (e)
+                     (Branch
+                      AndR
+                      (Sequence
+                       =>R
+                       (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
+                                e)
+                       AndL
+                       (Branch
+                        (=>L (=> (in e sx) (conj (in e xx) (= x e))))
+                        I
+                        (Sequence
+                         AndL
+                         (=L e x)
+                         =R)))
+                      (Sequence
+                       =>R
+                       (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
+                                e)
+                       AndL
+                       (Branch
+                        (=>L (=> (conj (in e xx) (= x e)) (in e sx)))
+                        (Branch
+                         AndR
+                         (Sequence
+                          (=L e x)
+                          I)
+                         (Sequence
+                          (=L e x)
+                          =R))
+                        I)))))))))))))))
