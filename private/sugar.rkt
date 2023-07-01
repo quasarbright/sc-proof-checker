@@ -31,8 +31,9 @@
  (contract-out
   [Debug rule/c]
   [TrustMe rule/c]
-  [ForallL (-> formula? formula? rule?)]
-  [ExistsR (-> formula? rule?)])
+  [NoSubproofs! (-> rule/c rule/c)]
+  [ForallL (-> formula? formula? rule/c)]
+  [ExistsR (-> formula? rule/c)])
  (rename-out
   [ForallR* ForallR]
   [ExistsL* ExistsL])
@@ -277,6 +278,14 @@
 ; Used when you're lazy!
 (define-rule (TrustMe ctx p)
   '())
+
+; Assert that an application of a "dynamic" rule requires no subproofs.
+; Useful for asserting that an automatic rule fully succeeds.
+(define-rule ((NoSubproofs! rul) ctx p)
+  (define subs (rul ctx p))
+  (if (null? subs)
+      subs
+      (error 'NoSubproofs! "Rule ~a was unable to automatically prove ~a" rul p)))
 
 ; theories
 

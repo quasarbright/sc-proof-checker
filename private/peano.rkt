@@ -30,18 +30,31 @@
 (define zero-is-nat-axiom (nat? zero))
 (define succ-is-nat-axiom (forall n (=> (nat? n) (nat? (S n)))))
 
+; ctx |- (nat? n)
+; ------------------- SuccNat
+; ctx |- (nat? (S n))
+(define-rule (SuccNat ctx (and p `(nat? (S ,n))))
+  (assert-in-context succ-is-nat-axiom)
+  (check-proof/defer
+   ctx p
+   (Sequence
+    (ForallL succ-is-nat-axiom n)
+    (Branch
+     (=>L (inst succ-is-nat-axiom n))
+     Defer
+     I))))
+
 ; used for inductive theorems
 (define-syntax forall-nat
   (syntax-rules ()
     [(_ () body) body]
-    [(_ (n) body) (forall (n) (=> (nat? n) body))]
     [(_ (n0 n ...) body)
-     (forall (n0 n ...) (=> (conj (nat? n0) (nat? n) ...)
-                            body))]
-    [(_ n body) (forall (n) (=> (nat? n) body))]))
+     (forall (n0) (=> (nat? n0)
+                      (forall-nat (n ...) body)))]
+    [(_ n body) (forall-nat (n) body)]))
 
 ; ctx |- p[zero/x]   ctx |- (forall n ((nat? n) and p[n/x]) => p[(succ n)/x])
-; ------------------------------------------------------- NatInduction
+; --------------------------------------------------------------------------- NatInduction
 ; ctx |- (forall x (=> (nat? x) p))
 (define-rule (NatInduction ctx `(forall ,x (=> (nat? ,x) ,p)))
   (list (/- ctx (subst p x zero))
@@ -135,18 +148,111 @@
            I
            I)))))))))
 
-; auto rule for proving a natural
-(define-rule (NatR ctx `(nat? ,n))
+(define-theorem! additive-closure
+  peano (forall-nat (a b) (nat? (add a b)))
+  (ForallNatR
+   (a)
+   (Branch
+    NatInduction
+    (Sequence
+     (AddZero a)
+     I)
+    (ForallR
+     (n)
+     (Sequence
+      =>R
+      AndL
+      (Sequence
+       (AddSucc a n)
+       SuccNat
+       I))))))
+
+; ctx |- (nat? a)   ctx |- (nat? b)
+; --------------------------------- AddNat
+; ctx |- (nat? (add a b))
+(define-rule (AddNat ctx (and p `(nat? (add ,a ,b))))
+  (assert-in-context additive-closure)
+  (check-proof/defer
+   ctx p
+   (Sequence
+    (ForallL additive-closure a)
+    (Branch
+     (=>L (inst additive-closure a))
+     Defer
+     (Sequence
+      (ForallL (forall-nat b (nat? (add a b))) b)
+      (Branch
+       (=>L (=> (nat? b) (nat? (add a b))))
+       Defer
+       I))))))
+
+(define-theorem! multiplicative-closure
+  peano (forall-nat (a b) (nat? (mul a b)))
+  (ForallNatR
+   (a)
+   (Branch
+    NatInduction
+    (Sequence
+     (MulZero a)
+     I)
+    (ForallR
+     (n)
+     (Sequence
+      =>R
+      AndL
+      (Sequence
+       (MulSucc a n)
+       (Branch
+        AddNat
+        I
+        I)))))))
+
+; ctx |- (nat? a)   ctx |- (nat? b)
+; --------------------------------- MulNat
+; ctx |- (nat? (mul a b))
+(define-rule (MulNat ctx (and p `(nat? (mul ,a ,b))))
+  (assert-in-context multiplicative-closure)
+  (check-proof/defer
+   ctx p
+   (Sequence
+    (ForallL multiplicative-closure a)
+    (Branch
+     (=>L (inst multiplicative-closure a))
+     Defer
+     (Sequence
+      (ForallL (forall-nat b (nat? (mul a b))) b)
+      (Branch
+       (=>L (=> (nat? b) (nat? (mul a b))))
+       Defer
+       I))))))
+
+; checked auto rule for proving a natural
+; pretty cool
+(define-rule (NatR ctx (and p `(nat? ,n)))
   (match n
     [(== zero alpha-eqv?)
-     '()]
-    [`(S ,n) (NatR ctx `(nat? ,n))]
-    ; TODO addition closure theorem
-    ; TODO multiplication closure theorem
-    [(list (or 'add 'mul) n m)
-     (append (NatR ctx `(nat? ,n))
-             (NatR ctx `(nat? ,m)))]
-    [_ (if (in-context? (nat? n)) '() (list (/- ctx (nat? n))))]))
+     (assert-in-context zero-is-nat-axiom)
+     (check-proof/defer ctx p I)]
+    [`(S ,_)
+     (assert-in-context succ-is-nat-axiom)
+     (check-proof/defer
+      ctx p
+      (Sequence SuccNat NatR))]
+    [`(mul ,_ ,_)
+     (assert-in-context multiplicative-closure)
+     (check-proof/defer
+      ctx p
+      (Branch MulNat NatR NatR))]
+    [`(add ,_ ,_)
+     (assert-in-context additive-closure)
+     (check-proof/defer
+      ctx p
+      (Branch AddNat NatR NatR))]
+    [_ (check-proof/defer
+        ctx p
+        (if (in-context? (nat? n))
+            I
+            Defer))]))
 
 (define-rule ((ForallNatL (and p-forall-nat `(forall ,n (=> (nat? ,n) ,_))) t) ctx p)
   (check-proof/defer
@@ -155,7 +261,7 @@
     (ForallL p-forall-nat t)
     (Branch
      (=>L (inst p-forall-nat t))
-     NatR
+     (NoSubproofs! NatR)
      Defer))))
 
 ; for when you don't need to use induction
@@ -448,3 +554,14 @@
     (=L (mul n (S zero))
         n)
     Defer)))
+
+; now we know for sure
+(define-theorem! one-plus-one-is-two
+  peano (= (add (S zero) (S zero))
+           (S (S zero)))
+  (Sequence
+   (AddSucc (S zero) zero)
+   (AddCommute (S zero) zero)
+   (AddSucc zero zero)
+   (AddZero zero)
+   =R))
