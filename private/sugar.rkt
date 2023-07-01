@@ -45,27 +45,32 @@
     [(_ ((name pat ...) ctx p) body ...)
      (define/syntax-parse (arg ...) (generate-temporaries (attribute pat)))
      #'(define (name arg ...)
-         (match*-formula (arg ...)
-           [(pat ...)
-            (define rul
-              (rule (lambda (ctx pv)
-                      (match-formula pv
-                                     [p (parameterize ([current-context ctx]
-                                                       [current-conclusion pv]
-                                                       [current-rule rul])
-                                          body
-                                          ...)]))
-                    'name))
-            rul]))]
+         (define rul
+           (rule (lambda (ctx pv)
+                   (parameterize ([current-context ctx]
+                                  [current-conclusion pv]
+                                  [current-rule rul])
+                     ; this match* could happen outside of the lambda,
+                     ; but then we couldn't set current-rule for the error message
+                     (match*-formula (arg ...)
+                                     [(pat ...)
+                                      (match-formula pv
+                                                     [p
+                                                      body
+                                                      ...])])))
+                 'name))
+         rul
+         )]
     [(_ (name ctx p) body ...)
      #'(define name
          (rule (lambda (ctx pv)
-                 (match-formula pv
-                   [p (parameterize ([current-context ctx]
-                                     [current-conclusion pv]
-                                     [current-rule name])
-                        body
-                        ...)]))
+                 (parameterize ([current-context ctx]
+                                [current-conclusion pv]
+                                [current-rule name])
+                   (match-formula pv
+                                  [p
+                                   body
+                                   ...])))
                'name))]))
 
 (define-syntax match*-formula

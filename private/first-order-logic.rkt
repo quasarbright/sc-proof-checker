@@ -123,7 +123,7 @@
 (define-rule ((=L target replacement) ctx p)
   (unless (or (in-context? (= target replacement) ctx)
               (in-context? (= replacement target) ctx))
-    (error '=L "couldn't find equality in context"))
+    (error '=L "couldn't find equality in context ~a" (= target replacement)))
   (list (/- ctx (subst p target replacement))))
 
 ; ------------ =R

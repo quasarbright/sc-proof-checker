@@ -40,6 +40,7 @@
   [context-union (->* () #:rest (listof context?) context?)]
   [subcontext? (-> context? context? any/c)]
   ; formula operations
+  [inst (-> formula? formula? formula?)]
   ; (subst p target replacement) is p[replacement/target]
   [subst (-> formula? formula? formula? formula?)]
   [context-bound? (-> context? any/c)]
@@ -212,15 +213,10 @@
 ; A Theory is a
 (struct theory [axioms operators [theorems #:mutable]] #:transparent)
 (define theory/c
-  (struct/dc theory
-             [axioms (listof formula?)]
-             [operators (listof operator/c)]
-             [theorems (and/c (listof formula?))]
-             ; TODO operator check?
-             ; TODO remove this and enforce it in add-theory! instead
-             #:inv (axioms theorems) (for/and ([theorem theorems])
-                                       (subset? (free-vars theorem)
-                                                (free-vars/context (apply context axioms))))))
+  (struct/c theory
+            (listof formula?)
+            (listof operator/c)
+            (and/c (listof formula?))))
 ; Theorems are assumed to be proven under the axioms.
 ; Theorems may have free variables as long as they are free in the axioms (like zero in peano)
 (define (make-theory axioms operators) (theory axioms operators '()))
@@ -315,6 +311,14 @@
     (in-context? p ctx2)))
 
 ; formula operations
+
+; Formula Formula
+; instantiate a quantification formula
+(define (inst p replacement)
+  (match p
+    [(list (or 'forall 'exists) x p-body)
+     (subst p-body x replacement)]
+    [_ (error 'inst "formula not a quantification: ~a" p)]))
 
 ; Formula Formula Formula -> Formula
 ; p[replacement/target]
