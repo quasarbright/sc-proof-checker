@@ -278,7 +278,7 @@
        =>R
        ; assume there does exist such a thing
        (ExistsL
-        ([(exists x (neg (= x x))) x])
+        ([x (exists x (neg (= x x)))])
         (Branch
          (=>L (neg (= x x)))
          =R
@@ -302,7 +302,7 @@
       (Sequence
        NotR
        (ExistsL
-        ([(exists x (neg (= x x))) x])
+        ([x (exists x (neg (= x x)))])
         (Sequence
          (NotL (= x x))
          =R))))))
@@ -378,9 +378,9 @@
      (check-proof
       (context (exists (x y) (conj x y))) (exists z z)
       (ExistsL
-       ([(exists (x y) (conj x y)) w]
+       ([w (exists (x y) (conj x y))]
         ; notice how you have access to w here
-        [(exists y (conj w y)) w])
+        [w (exists y (conj w y))])
        (Sequence
         AndL
         (ExistsR (w) I))))))

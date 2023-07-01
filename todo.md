@@ -4,9 +4,6 @@
 * pattern expanders for formulae. do after structs if you do that
 * delayed formulae so they can access parameters
 * context queries to avoid having to hard-code ctx formulae
-* implicit Sequence on proof macros
 * for stuff like AddSucc, AddCommute, etc., they pollute the context. Find a way to do the replacement while leaving the context unchanged from the input
-* reverse ctx in Debug
-* reverse ExistsL clauses so it's like let
 * figure out custom indentation
 

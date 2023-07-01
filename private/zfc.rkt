@@ -143,11 +143,11 @@
                 I))])
     (Sequence
      (ExistsL
-      ([(exists xx (conj (in x xx) (in x xx))) xx])
+      ([xx (exists xx (conj (in x xx) (in x xx)))])
       (Cuts
        ([(exists sx (is-specification? sx e xx (= x e))) Specification])
        (ExistsL
-        ([(exists sx (is-specification? sx e xx (= x e))) sx])
+        ([sx (exists sx (is-specification? sx e xx (= x e)))])
         (QuantR
          ([exists sx]
           [forall y])

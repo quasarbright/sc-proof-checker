@@ -159,13 +159,13 @@
 ; useful for sequencing cuts
 (define-syntax Cuts
   (syntax-rules ()
-    [(_ () proof)
-     proof]
-    [(_ ([lemma lemma-proof] pairs ...) proof)
+    [(_ () body ...)
+     (Sequence body ...)]
+    [(_ ([lemma lemma-proof] pairs ...) body ...)
      (Branch
       (Cut lemma)
       lemma-proof
-      (Cuts (pairs ...) proof))]))
+      (Cuts (pairs ...) body ...))]))
 
 ; macros for formulae
 
@@ -210,13 +210,13 @@
 ; use to instantiate nested conclusion foralls
 (define-syntax ForallR*
   (syntax-rules ()
-    [(_ () proof) proof]
-    [(_ (x0 x ...) proof)
+    [(_ () body ...) (Sequence body ...)]
+    [(_ (x0 x ...) body ...)
      (fresh
       (x0)
       (Sequence
        (ForallR x0)
-       (ForallR* (x ...) proof)))]))
+       (ForallR* (x ...) body ...)))]))
 
 ; ctx, p-body[y/x] |- p
 ; --------------------------- ExistsL
@@ -229,25 +229,13 @@
 ; use to instantiate nested assumption exists
 (define-syntax ExistsL*
   (syntax-rules ()
-    [(_ () proof) proof]
-    [(_ ([p-exists x] pair ...) proof)
+    [(_ () body ...) (Sequence body ...)]
+    [(_ ([x p-exists] pair ...) body ...)
      (fresh
       (x)
       (Sequence
        (ExistsL p-exists x)
-       (ExistsL* (pair ...) proof)))]))
-
-; left off here
-#;
-(define-syntax ForallL*
-  (syntax-rules ()
-    [(_ p-forall (t) proof) (Sequence (ForallL p-forall t) proof)]
-    [(_ p-forall (t0 t ...) proof)
-     (let ([p p-forall])
-       (Sequence
-        (ForallL p t0)
-        (match-formula p
-          [`()])))]))
+       (ExistsL* (pair ...) body ...)))]))
 
 ; (forall x p-body) in ctx    ctx,p-body[t/x] |- p
 ; ------------------------------------------------ ForallL
@@ -270,19 +258,19 @@
 ; Used to instantiate nested assumption quantifications
 (define-syntax QuantL
   (syntax-rules (exists forall)
-    [(_ _ () proof) proof]
-    [(_ p ([exists x] pair ...) proof)
+    [(_ _ () body ...) (Sequence body ...)]
+    [(_ p ([exists x] pair ...) body ...)
      (let ([pv p])
        (Sequence
         (ExistsL*
-         ([pv x])
-         (QuantL (inst pv x) (pair ...) proof))))]
-    [(_ p ([forall t] pair ...) proof)
+         ([x pv])
+         (QuantL (inst pv x) (pair ...) body ...))))]
+    [(_ p ([forall t] pair ...) body ...)
      (let ([pv p]
            [tv t])
        (Sequence
         (ForallL pv tv)
-        (QuantL (inst pv tv) (pair ...) proof)))]))
+        (QuantL (inst pv tv) (pair ...) body ...)))]))
 
 ; ctx |- p[t/x]
 ; ------------------- ExistsR
@@ -295,22 +283,22 @@
 ; used for proving nested existentials
 (define-syntax ExistsR*
   (syntax-rules ()
-    [(_ () proof) proof]
-    [(_ (t0 t ...) proof)
+    [(_ () body ...) (Sequence body ...)]
+    [(_ (t0 t ...) body ...)
      (Sequence
       (ExistsR t0)
-      (ExistsR* (t ...) proof))]))
+      (ExistsR* (t ...) body ...))]))
 
 ; used for proving nested quantifications
 (define-syntax QuantR
   (syntax-rules (exists forall)
-    [(_ () proof) proof]
-    [(_ ([exists t] pair ...) proof)
+    [(_ () body ...) (Sequence body ...)]
+    [(_ ([exists t] pair ...) body ...)
      (Sequence
       (ExistsR t)
-      (QuantR (pair ...) proof))]
-    [(_ ([forall x] pair ...) proof)
-     (ForallR* (x) (QuantR (pair ...) proof))]))
+      (QuantR (pair ...) body ...))]
+    [(_ ([forall x] pair ...) body ...)
+     (ForallR* (x) (QuantR (pair ...) body ...))]))
 
 ; -------- Debug
 ; ctx |- p
@@ -318,7 +306,8 @@
 ; Can be used for an interactive experience.
 (define-rule (Debug ctx p)
   (displayln "given")
-  (for ([p ctx]) (displayln p))
+  ; assumes ctx is a list
+  (for ([p (reverse ctx)]) (displayln p))
   (displayln "prove")
   (displayln p)
   '())
