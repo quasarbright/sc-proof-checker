@@ -186,17 +186,14 @@
       (Cuts
        ([(= (add zero (S n)) (S n))
          (Sequence
-          (ForallL add-succ-axiom zero)
-          (ForallL (forall b (= (add zero (S b)) (S (add zero b)))) n)
-          (=L (add zero (S n)) (S (add zero n)))
+          (AddSucc zero n)
           (=L (add zero n) (add n zero))
-          (ForallL add-zero-axiom n)
-          (=L (add n zero) n)
+          (AddZero n)
           =R)]
         [(= (add (S n) zero) (S n))
          (Sequence
-          (ForallL add-zero-axiom (S n))
-          I)])
+          (AddZero (S n))
+          =R)])
        (Sequence
         (=L (add zero (S n)) (S n))
         (=L (add (S n) zero) (S n))
@@ -212,22 +209,15 @@
       (Cuts
        ([(= (add (S n) zero) (S n))
          (Sequence
-          (ForallL add-zero-axiom (S n))
-          I)]
+          (AddZero (S n))
+          =R)]
         [(= (add zero (S n)) (S n))
          (Sequence
-          (ForallL add-succ-axiom zero)
-          (ForallL (forall b (= (add zero (S b)) (S (add zero b)))) n)
-          (=L (add zero (S n)) (S (add zero n)))
-          (ForallL (forall-nat b (= (add n b) (add b n))) zero)
-          (Branch
-           (=>L (=> (nat? zero) (= (add n zero) (add zero n))))
-           NatR
-           (Sequence
-            (=L (add zero n) (add n zero))
-            (ForallL add-zero-axiom n)
-            (=L (add n zero) n)
-            =R)))])
+          (AddSucc zero n)
+          (ForallNatL (forall-nat b (= (add n b) (add b n))) zero)
+          (=L (add zero n) (add n zero))
+          (AddZero n)
+          =R)])
        (Sequence
         (=L (add (S n) zero) (S n))
         (=L (add zero (S n)) (S n))
@@ -238,33 +228,19 @@
         =>R
         AndL
         ; get left side to (S (S (m + n)))
-        (ForallL add-succ-axiom (S n))
-        (ForallL (forall b (= (add (S n) (S b)) (S (add (S n) b)))) m)
-        (=L (add (S n) (S m)) (S (add (S n) m)))
+        (AddSucc (S n) m)
         (=L (add (S n) m) (add m (S n)))
-        (ForallL add-succ-axiom m)
-        (ForallL (forall b (= (add m (S b)) (S (add m b)))) n)
-        (=L (add m (S n)) (S (add m n)))
+        (AddSucc m n)
         ; get right side to (S (S (m + n)))
-        (ForallL add-succ-axiom (S m))
-        (ForallL (forall b (= (add (S m) (S b)) (S (add (S m) b)))) n)
-        (=L (add (S m) (S n)) (S (add (S m) n)))
-        (ForallL (forall-nat b (= (add n b) (add b n))) (S m))
-        (Branch
-         (=>L (=> (nat? (S m)) (= (add n (S m)) (add (S m) n))))
-         NatR
-         (Sequence
-          (=L (add (S m) n) (add n (S m)))
-          (ForallL add-succ-axiom n)
-          (ForallL (forall b (= (add n (S b)) (S (add n b)))) m)
-          (=L (add n (S m)) (S (add n m)))
-          (ForallL (forall-nat b (= (add n b) (add b n))) m)
-          (Branch
-           (=>L (=> (nat? m) (= (add n m) (add m n))))
-           NatR
-           (Sequence
-            (=L (add n m) (add m n))
-            =R)))))))))))
+        (AddSucc (S m) n)
+        (ForallNatL (forall-nat b (= (add n b) (add b n))) (S m))
+        (=L (add (S m) n) (add n (S m)))
+        (ForallL add-succ-axiom n)
+        (ForallL (forall b (= (add n (S b)) (S (add n b)))) m)
+        (=L (add n (S m)) (S (add n m)))
+        (ForallNatL (forall-nat b (= (add n b) (add b n))) m)
+        (=L (add n m) (add m n))
+        =R)))))))
 
 ; ctx |- p[(add b a)/(add a b)]
 ; ----------------------------- AddCommute
@@ -304,32 +280,27 @@
     (Sequence
      =>R
      AndL
-     (ForallR
-      (b)
+     (ForallNatR
+      (b c)
       (Sequence
-       =>R
-       (ForallR
-        (c)
-        (Sequence
-         =>R
-         (AddCommute (S n) (add b c))
-         (AddSucc (add b c) n)
-         (AddCommute (S n) b)
-         (AddSucc b n)
-         (AddCommute (S (add b n)) c)
-         (AddSucc c (add b n))
-         (AddCommute (add b c) n)
-         (AddCommute c (add b n))
-         (AddCommute b n)
-         (ForallNatL (forall-nat b (forall-nat c (= (add n (add b c))
-                                                    (add (add n b) c))))
-                     b)
-         (ForallNatL (forall-nat c (= (add n (add b c))
-                                      (add (add n b) c)))
-                     c)
-         (=L (add n (add b c))
-             (add (add n b) c))
-         =R))))))))
+       (AddCommute (S n) (add b c))
+       (AddSucc (add b c) n)
+       (AddCommute (S n) b)
+       (AddSucc b n)
+       (AddCommute (S (add b n)) c)
+       (AddSucc c (add b n))
+       (AddCommute (add b c) n)
+       (AddCommute c (add b n))
+       (AddCommute b n)
+       (ForallNatL (forall-nat b (forall-nat c (= (add n (add b c))
+                                                  (add (add n b) c))))
+                   b)
+       (ForallNatL (forall-nat c (= (add n (add b c))
+                                    (add (add n b) c)))
+                   c)
+       (=L (add n (add b c))
+           (add (add n b) c))
+       =R))))))
 
 ; (add (add a b) c) ~> (add a (add b c))
 ; here the R suffix just means associate to the right
@@ -372,38 +343,22 @@
       ; prove 0n = n0 => 0(S n) = (S n)0
       (Sequence
        =>R
+       AndL
        ; assume 0n = n0
        (Cuts
         ([(= (mul zero (S n)) zero)
           (Sequence
-           (ForallL mul-succ-axiom zero)
-           (ForallL (forall b (= (mul zero (S b)) (add zero (mul zero b))))
-                    n)
-           (Sequence
-            (=L (mul zero (S n)) (add zero (mul zero n)))
-            (=L (mul zero n) (mul n zero))
-            (ForallL mul-zero-axiom n)
-            (Sequence
-             (=L (mul n zero) zero)
-             ; use add-zero
-             (ForallL add-zero-axiom zero)
-             I)))]
+           (MulSucc zero n)
+           (=L (mul zero n) (mul n zero))
+           (MulZero n)
+           (AddZero zero)
+           =R)]
          [(= (mul (S n) zero) zero)
           (Sequence (MulZero (S n)) =R)])
         (Sequence
          (=L (mul zero (S n)) zero)
          (=L (mul (S n) zero) zero)
          =R))))))
-   ; inductive step on a
-   #;
-   (forall n:16
-           (=> (and (nat? n:16)
-                    (forall b:13
-                            (=> (nat? b:13)
-                                (= (mul n:16 b:13) (mul b:13 n:16)))))
-               (forall b:13
-                       (=> (nat? b:13)
-                           (= (mul (S n:16) b:13) (mul b:13 (S n:16)))))))
    (Sequence
     (ForallR
      (n)
@@ -416,24 +371,17 @@
        (Cuts
         ([(= (mul (S n) zero) zero)
           (Sequence
-           (ForallL mul-zero-axiom (S n))
-           I)]
+           (MulZero (S n))
+           =R)]
          [(= (mul zero (S n)) zero)
           ; get it to (add zero (mul zero n)), then use inductive assumption
           (Sequence
-           (ForallL mul-succ-axiom zero)
-           (ForallL (forall b (= (mul zero (S b)) (add zero (mul zero b))))
-                    n)
-           (=L (mul zero (S n)) (add zero (mul zero n)))
-           (ForallNatL additive-commutativity zero)
-           (ForallNatL (forall b (=> (nat? b) (= (add zero b) (add b zero)))) (mul zero n))
-           (=L (add zero (mul zero n)) (add (mul zero n) zero))
-           (ForallL add-zero-axiom (mul zero n))
-           (=L (add (mul zero n) zero) (mul zero n))
+           (MulSucc zero n)
+           (AddCommute zero (mul zero n))
+           (AddZero (mul zero n))
            (ForallNatL (forall-nat b (= (mul n b) (mul b n))) zero)
            (=L (mul zero n) (mul n zero))
-           (ForallL mul-zero-axiom n)
-           (=L (mul n zero) zero)
+           (MulZero n)
            =R)])
         (Sequence
          (=L (mul (S n) zero) zero)
