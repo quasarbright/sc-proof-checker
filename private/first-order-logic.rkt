@@ -189,8 +189,7 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallL bottom p)
-    I)))
+    (ForallL bottom (p) I))))
 
 ; ---------- TopR
 ; ctx |- top
@@ -201,8 +200,7 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ExistsR (car ctx))
-    I)))
+    (ExistsR ((car ctx)) I))))
 
 ; ctx, (not p) |- p
 ; ----------------- NotL
@@ -332,8 +330,7 @@
        (p)
        (Sequence
         =>R
-        (ForallL bottom p)
-        I)))))
+        (ForallL bottom (p) I))))))
   ; dual of absurd, idk what you'd call it
   (check-not-exn
    (lambda ()
@@ -343,8 +340,7 @@
        (p)
        (Sequence
         =>R
-        (ExistsR p)
-        I)))))
+        (ExistsR (p) I))))))
   ; transitive property of equality
   (check-not-exn
    (lambda ()
@@ -387,8 +383,7 @@
         [(exists y (conj w y)) w])
        (Sequence
         AndL
-        (ExistsR w)
-        I)))))
+        (ExistsR (w) I))))))
   ; modus ponens theorem
   (check-not-exn
    (lambda ()
@@ -417,5 +412,4 @@
       (check-proof
        (context (forall x x)) a
        (Sequence
-        (ForallL (forall x x) a)
-        I))))))
+        (ForallL (forall x x) (a) I)))))))

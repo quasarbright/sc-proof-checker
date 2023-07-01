@@ -110,15 +110,13 @@
   (check-proof/defer
    ctx `(= ,x ,y)
    (Sequence
-    (ForallL extensionality x)
-    (ForallL (forall (y) (=> (forall z (<=> (in z x) (in z y)))
-                             (= x y)))
-             y)
-    (Branch
-     (=>L (=> (forall z (<=> (in z x) (in z y)))
-              (= x y)))
-     Defer
-     I))))
+    (ForallL
+     extensionality (x y)
+     (Branch
+      (=>L (=> (forall z (<=> (in z x) (in z y)))
+               (= x y)))
+      Defer
+      I)))))
 
 (module+ test
   (check-not-exn
@@ -141,9 +139,8 @@
     ([(exists xx (conj (in x xx) (in x xx)))
       ; actually, use pairing
       (Sequence
-       (ForallL pairing x)
-       (ForallL (forall y (exists z (conj (in x z) (in y z)))) x)
-       I)])
+       (ForallL pairing (x x)
+                I))])
     (Sequence
      (ExistsL
       ([(exists xx (conj (in x xx) (in x xx))) xx])
@@ -151,106 +148,113 @@
        ([(exists sx (is-specification? sx e xx (= x e))) Specification])
        (ExistsL
         ([(exists sx (is-specification? sx e xx (= x e))) sx])
-        (Sequence
-         (ExistsR sx)
-         (ForallR (y) ; same as sx
-                  (Branch
-                   AndR
-                   (Sequence
-                    =>R
-                    Extensionality
-                    (ForallR
-                     (z)
-                     (Branch
-                      AndR
-                      ; prove sx subset y
-                      (Sequence
-                       =>R
-                       ; prove z = x, then use e = x => e in y
-                       (Cuts
-                        ([(= z x)
-                          ; use the definition of sx
-                          (Sequence
-                           (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
-                                    z)
-                           AndL
-                           (Branch
-                            (=>L (=> (in z sx) (conj (in z xx) (= x z))))
-                            I
-                            (Sequence
-                             AndL
-                             (=L x z)
-                             =R)))])
-                        (Sequence
-                         (ForallL (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
-                                  z)
-                         AndL
-                         (Branch
-                          (=>L (=> (= z x) (in z y)))
-                          I
-                          I))))
-                      ; prove y subset sx
-                      (Sequence
-                       =>R
-                       ; ctx can give you (= z x)
-                       ; then you can use the definition of sx to prove membership
-                       (Cuts
-                        ([(= z x)
-                          (Sequence
-                           (ForallL (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
-                                    z)
-                           AndL
-                           (Branch
-                            (=>L (=> (in z y) (= z x)))
-                            I
-                            I))])
-                        (Sequence
-                         (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e)))
-                                                  (=> (conj (in e xx) (= x e)) (in e sx))))
-                                  z)
-                         AndL
-                         (Branch
-                          (=>L (=> (conj (in z xx) (= x z)) (in z sx)))
-                          ; prove antecedent
-                          (Sequence
-                           (=L z x)
-                           (Branch
-                            AndR
-                            I; (in x xx)
-                            =R))
-                          I)))))))
-                   (Sequence
-                    =>R
-                    (=L y sx)
-                    (ForallR
-                     (e)
-                     (Branch
-                      AndR
-                      (Sequence
-                       =>R
-                       (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
-                                e)
-                       AndL
-                       (Branch
-                        (=>L (=> (in e sx) (conj (in e xx) (= x e))))
-                        I
-                        (Sequence
-                         AndL
-                         (=L e x)
-                         =R)))
-                      (Sequence
-                       =>R
-                       (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
-                                e)
-                       AndL
-                       (Branch
-                        (=>L (=> (conj (in e xx) (= x e)) (in e sx)))
+        (QuantR
+         ([exists sx]
+          [forall y])
+         (Branch
+          AndR
+          (Sequence
+           =>R
+           Extensionality
+           (ForallR
+            (z)
+            (Branch
+             AndR
+             ; prove sx subset y
+             (Sequence
+              =>R
+              ; prove z = x, then use e = x => e in y
+              (Cuts
+               ([(= z x)
+                 ; use the definition of sx
+                 (ForallL
+                  (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
+                  (z)
+                  (Sequence
+                   AndL
+                   (Branch
+                    (=>L (=> (in z sx) (conj (in z xx) (= x z))))
+                    I
+                    (Sequence
+                     AndL
+                     (=L x z)
+                     =R))))])
+               (ForallL
+                (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
+                (z)
+                (Sequence
+                 AndL
+                 (Branch
+                  (=>L (=> (= z x) (in z y)))
+                  I
+                  I)))))
+             ; prove y subset sx
+             (Sequence
+              =>R
+              ; ctx can give you (= z x)
+              ; then you can use the definition of sx to prove membership
+              (Cuts
+               ([(= z x)
+                 (ForallL
+                  (forall e (conj (=> (in e y) (= e x)) (=> (= e x) (in e y))))
+                  (z)
+                  (Sequence
+                   AndL
+                   (Branch
+                    (=>L (=> (in z y) (= z x)))
+                    I
+                    I)))])
+               (ForallL
+                (forall e (conj (=> (in e sx) (conj (in e xx) (= x e)))
+                                (=> (conj (in e xx) (= x e)) (in e sx))))
+                (z)
+                (Sequence
+                 AndL
+                 (Branch
+                  (=>L (=> (conj (in z xx) (= x z)) (in z sx)))
+                  ; prove antecedent
+                  (Sequence
+                   (=L z x)
+                   (Branch
+                    AndR
+                    I; (in x xx)
+                    =R))
+                  I))))))))
+          (Sequence
+           =>R
+           (=L y sx)
+           (ForallR
+            (e)
+            (Branch
+             AndR
+             (Sequence
+              =>R
+              (ForallL
+               (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
+               (e)
+               (Sequence
+                AndL
+                (Branch
+                 (=>L (=> (in e sx) (conj (in e xx) (= x e))))
+                 I
+                 (Sequence
+                  AndL
+                  (=L e x)
+                  =R)))))
+             (Sequence
+              =>R
+              (ForallL (forall e (conj (=> (in e sx) (conj (in e xx) (= x e))) (=> (conj (in e xx) (= x e)) (in e sx))))
+                       (e)
+                       (Sequence
+                        AndL
                         (Branch
-                         AndR
-                         (Sequence
-                          (=L e x)
-                          I)
-                         (Sequence
-                          (=L e x)
-                          =R))
-                        I)))))))))))))))
+                         (=>L (=> (conj (in e xx) (= x e)) (in e sx)))
+                         (Branch
+                          AndR
+                          (Sequence
+                           (=L e x)
+                           I)
+                          (Sequence
+                           (=L e x)
+                           =R))
+                         I))))))))))))))))

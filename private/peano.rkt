@@ -38,11 +38,13 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallL succ-is-nat-axiom n)
-    (Branch
-     (=>L (inst succ-is-nat-axiom n))
-     Defer
-     I))))
+    (ForallL
+     succ-is-nat-axiom
+     (n)
+     (Branch
+      (=>L (inst succ-is-nat-axiom n))
+      Defer
+      I)))))
 
 ; used for inductive theorems
 (define-syntax forall-nat
@@ -72,21 +74,23 @@
   (assert-in-context add-zero-axiom)
   (check-proof/defer
    ctx p
-   (Sequence
-    (ForallL add-zero-axiom n)
-    (=L (add n zero) n)
-    Defer)))
+   (ForallL
+    add-zero-axiom
+    (n)
+    (Sequence
+     (=L (add n zero) n)
+     Defer))))
 
 ; (add a (S b)) ~> (S (add a b))
 (define-rule ((AddSucc a b) ctx p)
   (assert-in-context add-succ-axiom)
   (check-proof/defer
    ctx p
-   (Sequence
-    (ForallL add-succ-axiom a)
-    (ForallL (inst add-succ-axiom a) b)
-    (=L (add a (S b)) (S (add a b)))
-    Defer)))
+
+   (ForallL add-succ-axiom (a b)
+            (Sequence
+             (=L (add a (S b)) (S (add a b)))
+             Defer))))
 
 (define mul-zero-axiom
   (forall a (= (mul a zero)
@@ -100,10 +104,12 @@
   (assert-in-context mul-zero-axiom)
   (check-proof/defer
    ctx p
-   (Sequence
-    (ForallL mul-zero-axiom n)
-    (=L (mul n zero) zero)
-    Defer)))
+   (ForallL
+    mul-zero-axiom
+    (n)
+    (Sequence
+     (=L (mul n zero) zero)
+     Defer))))
 
 ; (mul a (S b)) ~> (add a (mul a b))
 (define-rule ((MulSucc a b) ctx p)
@@ -111,10 +117,12 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallL mul-succ-axiom a)
-    (ForallL (inst mul-succ-axiom a) b)
-    (=L (mul a (S b)) (add a (mul a b)))
-    Defer)))
+    (ForallL
+     mul-succ-axiom
+     (a b)
+     (Sequence
+      (=L (mul a (S b)) (add a (mul a b)))
+      Defer)))))
 
 (define peano-axioms (list zero-is-nat-axiom
                            succ-is-nat-axiom
@@ -142,11 +150,11 @@
          (Sequence
           =>R
           AndL
-          (ForallL succ-is-nat-axiom n)
-          (Branch
-           (=>L (=> (nat? n) (nat? (S n))))
-           I
-           I)))))))))
+          (ForallL succ-is-nat-axiom (n)
+                   (Branch
+                    (=>L (=> (nat? n) (nat? (S n))))
+                    I
+                    I))))))))))
 
 (define-theorem! additive-closure
   peano (forall-nat (a b) (nat? (add a b)))
@@ -174,13 +182,15 @@
   (assert-in-context additive-closure)
   (check-proof/defer
    ctx p
-   (Sequence
-    (ForallL additive-closure a)
+   (ForallL
+    additive-closure
+    (a)
     (Branch
      (=>L (inst additive-closure a))
      Defer
-     (Sequence
-      (ForallL (forall-nat b (nat? (add a b))) b)
+     (ForallL
+      (forall-nat b (nat? (add a b)))
+      (b)
       (Branch
        (=>L (=> (nat? b) (nat? (add a b))))
        Defer
@@ -214,13 +224,15 @@
   (assert-in-context multiplicative-closure)
   (check-proof/defer
    ctx p
-   (Sequence
-    (ForallL multiplicative-closure a)
+   (ForallL
+    multiplicative-closure
+    (a)
     (Branch
      (=>L (inst multiplicative-closure a))
      Defer
-     (Sequence
-      (ForallL (forall-nat b (nat? (mul a b))) b)
+     (ForallL
+      (forall-nat b (nat? (mul a b)))
+      (b)
       (Branch
        (=>L (=> (nat? b) (nat? (mul a b))))
        Defer
@@ -254,15 +266,27 @@
             I
             Defer))]))
 
-(define-rule ((ForallNatL (and p-forall-nat `(forall ,n (=> (nat? ,n) ,_))) t) ctx p)
+; (nat? t) obvious in ctx   ctx, p[t/n] |- q
+; ------------------------------------------ ForallNatL^
+; ctx,(forall n (=> (nat? n) p)) |- q
+(define-rule ((ForallNatL^ (and p-forall-nat `(forall ,n (=> (nat? ,n) ,_))) t) ctx p)
   (check-proof/defer
    ctx p
-   (Sequence
-    (ForallL p-forall-nat t)
-    (Branch
-     (=>L (inst p-forall-nat t))
-     (NoSubproofs! NatR)
-     Defer))))
+   (ForallL p-forall-nat (t)
+            (Branch
+             (=>L (inst p-forall-nat t))
+             (NoSubproofs! NatR)
+             Defer))))
+
+(define-syntax ForallNatL
+  (syntax-rules ()
+    [(ForallNatL _ () proof) proof]
+    [(ForallNatL p (t0 t ...) proof)
+     (let ([pv p]
+           [tv t0])
+       (Sequence
+        (ForallNatL^ pv tv)
+        (ForallNatL (inst/nat pv tv) (t ...) proof)))]))
 
 ; for when you don't need to use induction
 (define-syntax ForallNatR
@@ -271,7 +295,7 @@
     [(_ (x0 x ...) proof)
      (ForallR (x0) (Sequence =>R (ForallNatR (x ...) proof)))]))
 
-; like inst, but gets rid of the nat impl
+; like inst, but gets rid of the nat impl and only for foralls
 (define (inst/nat p replacement)
   (match p
     [`(forall ,n (=> (nat? ,n) ,p))
@@ -320,10 +344,12 @@
         [(= (add zero (S n)) (S n))
          (Sequence
           (AddSucc zero n)
-          (ForallNatL (forall-nat b (= (add n b) (add b n))) zero)
-          (=L (add zero n) (add n zero))
-          (AddZero n)
-          =R)])
+          (ForallNatL (forall-nat b (= (add n b) (add b n)))
+                      (zero)
+                      (Sequence
+                       (=L (add zero n) (add n zero))
+                       (AddZero n)
+                       =R)))])
        (Sequence
         (=L (add (S n) zero) (S n))
         (=L (add zero (S n)) (S n))
@@ -339,14 +365,17 @@
         (AddSucc m n)
         ; get right side to (S (S (m + n)))
         (AddSucc (S m) n)
-        (ForallNatL (forall-nat b (= (add n b) (add b n))) (S m))
-        (=L (add (S m) n) (add n (S m)))
-        (ForallL add-succ-axiom n)
-        (ForallL (forall b (= (add n (S b)) (S (add n b)))) m)
-        (=L (add n (S m)) (S (add n m)))
-        (ForallNatL (forall-nat b (= (add n b) (add b n))) m)
-        (=L (add n m) (add m n))
-        =R)))))))
+        (ForallNatL (forall-nat b (= (add n b) (add b n)))
+                    ((S m))
+                    (Sequence
+                     (=L (add (S m) n) (add n (S m)))
+                     (ForallL add-succ-axiom (n m)
+                              (Sequence
+                               (=L (add n (S m)) (S (add n m)))
+                               (ForallNatL (forall-nat b (= (add n b) (add b n))) (m)
+                                           (Sequence
+                                            (=L (add n m) (add m n))
+                                            =R)))))))))))))
 
 ; ctx |- p[(add b a)/(add a b)]
 ; ----------------------------- AddCommute
@@ -357,10 +386,10 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL additive-commutativity a)
-    (ForallNatL (inst/nat additive-commutativity a) b)
-    (=L (add a b) (add b a))
-    Defer)))
+    (ForallNatL additive-commutativity (a b)
+                (Sequence
+                 (=L (add a b) (add b a))
+                 Defer)))))
 
 (define-theorem! additive-associativity
   peano (forall-nat a (forall-nat b (forall-nat c (= (add a (add b c))
@@ -400,13 +429,11 @@
        (AddCommute b n)
        (ForallNatL (forall-nat b (forall-nat c (= (add n (add b c))
                                                   (add (add n b) c))))
-                   b)
-       (ForallNatL (forall-nat c (= (add n (add b c))
-                                    (add (add n b) c)))
-                   c)
-       (=L (add n (add b c))
-           (add (add n b) c))
-       =R))))))
+                   (b c)
+                   (Sequence
+                    (=L (add n (add b c))
+                        (add (add n b) c))
+                    =R))))))))
 
 ; (add (add a b) c) ~> (add a (add b c))
 ; here the R suffix just means associate to the right
@@ -415,12 +442,11 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL additive-associativity a)
-    (ForallNatL (inst/nat additive-associativity a) b)
-    (ForallNatL (inst/nat (inst/nat additive-associativity a) b) c)
-    (=L (add (add a b) c)
-        (add a (add b c)))
-    Defer)))
+    (ForallNatL additive-associativity (a b c)
+                (Sequence
+                 (=L (add (add a b) c)
+                     (add a (add b c)))
+                 Defer)))))
 
 ; (add a (add b c)) ~> (add (add a b) c)
 ; here the L suffix just means associate to the left
@@ -429,12 +455,11 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL additive-associativity a)
-    (ForallNatL (inst/nat additive-associativity a) b)
-    (ForallNatL (inst/nat (inst/nat additive-associativity a) b) c)
-    (=L (add a (add b c))
-        (add (add a b) c))
-    Defer)))
+    (ForallNatL additive-associativity (a b c)
+                (Sequence
+                 (=L (add a (add b c))
+                     (add (add a b) c))
+                 Defer)))))
 
 (define-theorem! multiplicative-commutativity
   peano (forall-nat a (forall-nat b (= (mul a b) (mul b a))))
@@ -485,10 +510,12 @@
            (MulSucc zero n)
            (AddCommute zero (mul zero n))
            (AddZero (mul zero n))
-           (ForallNatL (forall-nat b (= (mul n b) (mul b n))) zero)
-           (=L (mul zero n) (mul n zero))
-           (MulZero n)
-           =R)])
+           (ForallNatL (forall-nat b (= (mul n b) (mul b n)))
+                       (zero)
+                       (Sequence
+                        (=L (mul zero n) (mul n zero))
+                        (MulZero n)
+                        =R)))])
         (Sequence
          (=L (mul (S n) zero) zero)
          (=L (mul zero (S n)) zero)
@@ -506,22 +533,26 @@
          (AddSucc (add m (mul m n)) n)
          ; now right side
          (MulSucc (S m) n)
-         (ForallNatL (forall-nat b (= (mul n b) (mul b n))) (S m))
-         (=L (mul (S m) n) (mul n (S m)))
-         (MulSucc n m)
-         (AddCommute (S m) (add n (mul n m)))
-         (AddSucc (add n (mul n m)) m)
-         (AddCommute m (mul m n))
-         (AddAssocR (mul m n) m n)
+         (ForallNatL (forall-nat b (= (mul n b) (mul b n)))
+                     ((S m))
+                     (Sequence
+                      (=L (mul (S m) n) (mul n (S m)))
+                      (MulSucc n m)
+                      (AddCommute (S m) (add n (mul n m)))
+                      (AddSucc (add n (mul n m)) m)
+                      (AddCommute m (mul m n))
+                      (AddAssocR (mul m n) m n)
 
-         (AddCommute n (mul n m))
-         (AddAssocR (mul n m) n m)
+                      (AddCommute n (mul n m))
+                      (AddAssocR (mul n m) n m)
 
-         (AddCommute m n)
+                      (AddCommute m n)
 
-         (ForallNatL (forall-nat b (= (mul n b) (mul b n))) m)
-         (=L (mul m n) (mul n m))
-         =R))))))))
+                      (ForallNatL (forall-nat b (= (mul n b) (mul b n)))
+                                  (m)
+                                  (Sequence
+                                   (=L (mul m n) (mul n m))
+                                   =R))))))))))))
 
 ; (mul a b) ~> (mul b a)
 (define-rule ((MulCommute a b) ctx p)
@@ -529,10 +560,10 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL multiplicative-commutativity a)
-    (ForallNatL (inst/nat multiplicative-commutativity a) b)
-    (=L (mul a b) (mul b a))
-    Defer)))
+    (ForallNatL multiplicative-commutativity (a b)
+                (Sequence
+                 (=L (mul a b) (mul b a))
+                 Defer)))))
 
 (define-theorem! multiplicative-identity
   peano (forall-nat a (= (mul a (S zero)) a))
@@ -550,10 +581,11 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL multiplicative-identity n)
-    (=L (mul n (S zero))
-        n)
-    Defer)))
+    (ForallNatL multiplicative-identity (n)
+                (Sequence
+                 (=L (mul n (S zero))
+                     n)
+                 Defer)))))
 
 ; now we know for sure
 (define-theorem! one-plus-one-is-two

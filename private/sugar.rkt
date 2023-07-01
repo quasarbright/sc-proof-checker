@@ -31,12 +31,14 @@
  (contract-out
   [Debug rule/c]
   [TrustMe rule/c]
-  [NoSubproofs! (-> rule/c rule/c)]
-  [ForallL (-> formula? formula? rule/c)]
-  [ExistsR (-> formula? rule/c)])
+  [NoSubproofs! (-> rule/c rule/c)])
+ QuantL
+ QuantR
  (rename-out
+  [ExistsR* ExistsR]
   [ForallR* ForallR]
-  [ExistsL* ExistsL])
+  [ExistsL* ExistsL]
+  [ForallL* ForallL])
  define-theorem!)
 
 ; utilities for defining rules
@@ -248,11 +250,39 @@
           [`()])))]))
 
 ; (forall x p-body) in ctx    ctx,p-body[t/x] |- p
-; ------------------------------------------------
+; ------------------------------------------------ ForallL
 ; ctx |- p
 (define-rule ((ForallL (and p-forall `(forall ,x ,p-body)) t) ctx p)
   (assert-in-context p-forall)
   (list (/- (extend-context ctx (subst p-body x t)) p)))
+
+; Used to instantiate nested assumption foralls
+(define-syntax ForallL*
+  (syntax-rules ()
+    [(_ _ () proof) proof]
+    [(_ p (t0 t ...) proof)
+     (let ([pv p]
+           [tv t0])
+       (Sequence
+        (ForallL pv tv)
+        (ForallL* (inst pv tv) (t ...) proof)))]))
+
+; Used to instantiate nested assumption quantifications
+(define-syntax QuantL
+  (syntax-rules (exists forall)
+    [(_ _ () proof) proof]
+    [(_ p ([exists x] pair ...) proof)
+     (let ([pv p])
+       (Sequence
+        (ExistsL*
+         ([pv x])
+         (QuantL (inst pv x) (pair ...) proof))))]
+    [(_ p ([forall t] pair ...) proof)
+     (let ([pv p]
+           [tv t])
+       (Sequence
+        (ForallL pv tv)
+        (QuantL (inst pv tv) (pair ...) proof)))]))
 
 ; ctx |- p[t/x]
 ; ------------------- ExistsR
@@ -261,6 +291,26 @@
 ; t is something that exists that satisfied p!
 (define-rule ((ExistsR t) ctx `(exists ,x ,p))
   (list (/- ctx (subst p x t))))
+
+; used for proving nested existentials
+(define-syntax ExistsR*
+  (syntax-rules ()
+    [(_ () proof) proof]
+    [(_ (t0 t ...) proof)
+     (Sequence
+      (ExistsR t0)
+      (ExistsR* (t ...) proof))]))
+
+; used for proving nested quantifications
+(define-syntax QuantR
+  (syntax-rules (exists forall)
+    [(_ () proof) proof]
+    [(_ ([exists t] pair ...) proof)
+     (Sequence
+      (ExistsR t)
+      (QuantR (pair ...) proof))]
+    [(_ ([forall x] pair ...) proof)
+     (ForallR* (x) (QuantR (pair ...) proof))]))
 
 ; -------- Debug
 ; ctx |- p
