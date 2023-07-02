@@ -79,6 +79,7 @@
     (n)
     (Sequence
      (=L (add n zero) n)
+     ForgetLast
      Defer))))
 
 ; (add a (S b)) ~> (S (add a b))
@@ -90,6 +91,7 @@
    (ForallL add-succ-axiom (a b)
             (Sequence
              (=L (add a (S b)) (S (add a b)))
+             ForgetLast
              Defer))))
 
 (define mul-zero-axiom
@@ -109,6 +111,7 @@
     (n)
     (Sequence
      (=L (mul n zero) zero)
+     ForgetLast
      Defer))))
 
 ; (mul a (S b)) ~> (add a (mul a b))
@@ -122,6 +125,7 @@
      (a b)
      (Sequence
       (=L (mul a (S b)) (add a (mul a b)))
+      ForgetLast
       Defer)))))
 
 (define peano-axioms (list zero-is-nat-axiom
@@ -188,13 +192,14 @@
     (a)
     (Branch
      (=>L (inst additive-closure a))
-     Defer
+     (Sequence (RewindContext ctx)
+               Defer)
      (ForallL
       (forall-nat b (nat? (add a b)))
       (b)
       (Branch
        (=>L (=> (nat? b) (nat? (add a b))))
-       Defer
+       (Sequence (RewindContext ctx) Defer)
        I))))))
 
 (define-theorem! multiplicative-closure
@@ -230,13 +235,13 @@
     (a)
     (Branch
      (=>L (inst multiplicative-closure a))
-     Defer
+     (Sequence (RewindContext ctx) Defer)
      (ForallL
       (forall-nat b (nat? (mul a b)))
       (b)
       (Branch
        (=>L (=> (nat? b) (nat? (mul a b))))
-       Defer
+       (Sequence (RewindContext ctx) Defer)
        I))))))
 
 ; checked auto rule for proving a natural
@@ -391,6 +396,7 @@
     (ForallNatL additive-commutativity (a b)
                 (Sequence
                  (=L (add a b) (add b a))
+                 (RewindContext ctx)
                  Defer)))))
 
 (define-theorem! additive-associativity
@@ -448,6 +454,7 @@
                 (Sequence
                  (=L (add (add a b) c)
                      (add a (add b c)))
+                 (RewindContext ctx)
                  Defer)))))
 
 ; (add a (add b c)) ~> (add (add a b) c)
@@ -461,6 +468,7 @@
                 (Sequence
                  (=L (add a (add b c))
                      (add (add a b) c))
+                 (RewindContext ctx)
                  Defer)))))
 
 (define-theorem! multiplicative-commutativity
@@ -565,6 +573,7 @@
     (ForallNatL multiplicative-commutativity (a b)
                 (Sequence
                  (=L (mul a b) (mul b a))
+                 (RewindContext ctx)
                  Defer)))))
 
 (define-theorem! multiplicative-identity
@@ -587,6 +596,7 @@
                 (Sequence
                  (=L (mul n (S zero))
                      n)
+                 (RewindContext ctx)
                  Defer)))))
 
 ; now we know for sure

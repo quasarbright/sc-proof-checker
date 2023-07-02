@@ -24,6 +24,9 @@
   ; built-in rules
   [I rule/c]
   [Cut (-> formula/c* rule/c)]
+  [ForgetLast rule/c]
+  [Forget (-> formula/c* rule/c)]
+  [RewindContext (-> context? rule/c)]
   ; proof-checking
   [current-rule (parameter/c (or/c #f rule/c))]
   [current-context (parameter/c context?)]
@@ -181,6 +184,39 @@
           (list (/- ctx lemma)
                 (/- (cons lemma ctx) p)))
         'Cut))
+
+; ctx |- q
+; ---------- ForgetLast
+; ctx,p |- q
+; forget the most recent assumption
+(define ForgetLast
+  (rule (lambda (ctx p)
+          (when (null? ctx)
+            (error 'ForgetLast "context is empty"))
+          ; assumes ctx is a list
+          (list (/- (cdr ctx) p)))
+        'ForgetLast))
+
+; ctx |- q
+; ----------- Forget
+; ctx[p] |- q
+; forget a particular assumption
+(define (Forget p)
+  (rule (lambda (ctx q)
+          ; assumes ctx is a list
+          (list (/- (filter (lambda (q) (not (alpha-eqv? p q))) ctx)
+                    q)))
+        'Forget))
+
+; ctx^ sub ctx   ctx^ |- p
+; ------------------------ RewindContext
+; ctx |- p
+(define (RewindContext ctx^)
+  (rule (lambda (ctx p)
+          (unless (subcontext? ctx^ ctx)
+            (error 'RewindContext "context must be subcontext of current one"))
+          (list (/- ctx^ p)))
+        'RewindContext))
 
 ; A Proof is a
 ; (list Judgement ProofTree)
