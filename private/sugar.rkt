@@ -20,7 +20,6 @@
  match-formula
  match*-formula
  ; checked rules
- Defer
  (contract-out
   [check-proof/defer (-> context? formula? proof-tree? (listof judgement?))])
  ; utilities for constructing proofs
@@ -35,6 +34,8 @@
  ; core formulae
  fresh
  ; built-in rules
+ ; don't put a contract bc you need to eq it lol
+ Defer
  (contract-out
   [Debug rule/c]
   [TrustMe rule/c]

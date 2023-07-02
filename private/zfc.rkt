@@ -2,7 +2,10 @@
 
 (require "./core.rkt"
          "./sugar.rkt"
-         "./first-order-logic.rkt")
+         "./first-order-logic.rkt"
+         racket/match
+         racket/set
+         racket/struct)
 (module+ test (require rackunit))
 (provide)
 
@@ -26,20 +29,79 @@
                 (exists y (conj (in y x)
                                (neg (exists z (conj (in z y) (in z x)))))))))
 
+; {x in superset : predicate}
+; x is bound in predicate
+(struct specification^ [x superset predicate] #:transparent
+  #:methods gen:formula
+  [(define (gen-subst p target replacement)
+     (match p
+       [(specification^ x superset predicate)
+        (specification^ x
+                        (subst superset target replacement)
+                        (if (occurs-free? x target)
+                            predicate
+                            (subst predicate target replacement)))]))
+   (define (gen-free-vars p)
+     (match p
+       [(specification^ x superset predicate)
+        (set-union (free-vars superset)
+                   (set-subtract (free-vars predicate) (list x)))]))
+   (define (gen-bound-vars p)
+     (match p
+       [(specification^ x superset predicate)
+        (set-union (list x) (bound-vars superset) (bound-vars predicate))]))
+   (define (gen-alpha-normalize p count vars)
+     (define v (normal-name count))
+     (define count^ (add1 count))
+     (match p
+       [(specification^ x superset predicate)
+        (define vars^ (hash-set vars x v))
+        (specification^ v
+                        (alpha-normalize superset count vars)
+                        (alpha-normalize predicate count^ vars^))]))]
+  #:methods gen:custom-write
+  [(define write-proc
+     (make-constructor-style-printer
+      (lambda (_) 'specification)
+      (lambda (p) (match p [(specification^ x superset predicate) (list x superset predicate)]))))])
+(define-match-expander specification
+  (syntax-rules ()
+    [(_ x superset predicate)
+     (specification^ x superset predicate)])
+  (syntax-rules ()
+    [(_ x superset predicate)
+     (fresh (x) (specification^ x superset predicate))]))
+
 (define-syntax-rule (is-specification? s member superset predicate)
   (forall (member) (<=> (in member s)
                         (conj (in member superset) predicate))))
 
-; --------------------------------------------------------------- Specification
-; ctx |- (exists y (forall x (<=> (in x y) (and (in x z) pred))))
-; You can specify a set by specifying a superset and a predicate
-(define-rule (Specification ctx (exists y (forall x (<=> (in x y) (conj (in x z) pred)))))
-  '())
+(define (spec-definition spec)
+  (match spec
+    [(specification x superset predicate)
+     (forall e (<=> (in e spec)
+                    (conj (in e superset)
+                          (subst predicate x e))))]))
+
+; ctx, forall e (<=> (in e (specification x super pred)) (conj (in e super) pred[e/x]))
+(define-rule ((Specification^ (and spec (specification x superset predicate))) ctx p)
+  (list (/- (extend-context ctx (spec-definition spec)) p)))
+
+; ctx, (in e spec) => (conj (in e super) pred[e/x]), (conj (in e super) pred[e/x]) => (in e spec)
+; e is a term
+(define-syntax-rule (Specification (e spec) body ...)
+  (Sequence
+   (Specification^ spec)
+   (ForallL (spec-definition spec)
+            (e)
+            <=>L
+            body ...)))
 
 (define pairing
   (forall (x y) (exists (z) (conj (in x z) (in y z)))))
 
 (define axiom-of-union
+  ; A = UF
   (forall F (exists A (forall Y (forall x (=> (conj (in x Y)
                                                    (in Y F))
                                               (in x A)))))))
@@ -132,116 +194,69 @@
   zfc (forall x (exists! sx (is-singleton? x sx)))
   (ForallR
    (x)
-   (Cuts
-    ([(exists xx (conj (in x xx) (in x xx)))
-      ; actually, use pairing
-      (Sequence
-       (ForallL pairing (x x)
-                I))])
-    (Sequence
-     (ExistsL
-      ([xx (exists xx (conj (in x xx) (in x xx)))])
-      (Cuts
-       ([(exists sx (is-specification? sx e xx (= x e))) Specification])
-       (ExistsL
-        ([sx (exists sx (is-specification? sx e xx (= x e)))])
-        (QuantR
-         ([exists! sx y])
-         (Sequence
-          Extensionality
-          (ForallR
-           (z)
-           (Branch
-            <=>R
-            ; prove sx subset y
-            (Sequence
-             ; prove z = x, then use e = x => e in y
-             (Cuts
-              ([(= z x)
-                ; use the definition of sx
-                (ForallL
-                 (forall e (<=> (in e sx) (conj (in e xx) (= x e))))
-                 (z)
-                 (Sequence
-                  <=>L
+   (QuantL
+    pairing
+    ([forall x]
+     [forall x]
+     [exists xx])
+    AndL
+    (Exists!R ((specification e xx (= e x)) sx)
+              (Sequence
+               Extensionality
+               (ForallR
+                (z)
+                (Branch
+                 <=>R
+                 ; spec subset sx
+                 (Specification
+                  (z (specification e xx (= e x)))
                   (Branch
-                   (=>L (=> (in z sx) (conj (in z xx) (= x z))))
+                   (=>L (=> (in z (specification e xx (= e x)))
+                            (conj (in z xx) (= z x))))
                    I
                    (Sequence
                     AndL
-                    (=L x z)
-                    =R))))])
-              (ForallL
-               (forall e (<=> (in e y) (= e x)))
+                    (=L z x)
+                    ; now to prove x in sx
+                    (ForallL (forall e (<=> (in e sx) (= e x)))
+                             (x)
+                             <=>L
+                             (Branch
+                              (=>L (=> (= x x) (in x sx)))
+                              =R
+                              I)))))
+                 ; sx subset spec
+                 ; z = x
+                 (ForallL (forall e (<=> (in e sx) (= e x)))
+                          (z)
+                          <=>L
+                          (Branch
+                           (=>L (=> (in z sx) (= z x)))
+                           I
+                           (Sequence
+                            (=L z x)
+                            (Specification (x (specification e xx (= e x)))
+                                           (Branch
+                                            (=>L (=> (conj (in x xx) (= x x))
+                                                     (in x (specification e xx (= e x)))))
+                                            (Branch AndR I =R)
+                                            I))))))))
+              (ForallR
                (z)
-               (Sequence
-                <=>L
-                (Branch
-                 (=>L (=> (= z x) (in z y)))
-                 I
-                 I)))))
-            ; prove y subset sx
-            (Sequence
-             ; ctx can give you (= z x)
-             ; then you can use the definition of sx to prove membership
-             (Cuts
-              ([(= z x)
-                (ForallL
-                 (forall e (<=> (in e y) (= e x)))
-                 (z)
-                 (Sequence
-                  <=>L
-                  (Branch
-                   (=>L (=> (in z y) (= z x)))
-                   I
-                   I)))])
-              (ForallL
-               (forall e (<=> (in e sx) (conj (in e xx) (= x e))))
-               (z)
-               (Sequence
-                <=>L
-                (Branch
-                 (=>L (=> (conj (in z xx) (= x z)) (in z sx)))
-                 ; prove antecedent
-                 (Sequence
-                  (=L z x)
-                  (Branch
-                   AndR
-                   I; (in x xx)
-                   =R))
-                 I))))))))
-         (Sequence
-          (=L y sx)
-          (ForallR
-           (e)
-           (Branch
-            <=>R
-            (Sequence
-             (ForallL
-              (forall e (<=> (in e sx) (conj (in e xx) (= x e))))
-              (e)
-              (Sequence
-               <=>L
-               (Branch
-                (=>L (=> (in e sx) (conj (in e xx) (= x e))))
-                I
-                (Sequence
-                 AndL
-                 (=L e x)
-                 =R)))))
-            (Sequence
-             (ForallL (forall e (<=> (in e sx) (conj (in e xx) (= x e))))
-                      (e)
-                      (Sequence
-                       <=>L
-                       (Branch
-                        (=>L (=> (conj (in e xx) (= x e)) (in e sx)))
-                        (Branch
-                         AndR
-                         (Sequence
-                          (=L e x)
-                          I)
-                         (Sequence
-                          (=L e x)
-                          =R))
-                        I)))))))))))))))
+               (=L sx (specification e xx (= e x)))
+               (Specification (z (specification e xx (= e x)))
+                              (Branch
+                               <=>R
+                               (Branch
+                                (=>L (=> (in z (specification e xx (= e x)))
+                                         (conj (in z xx) (= z x))))
+                                I
+                                (Sequence AndL I))
+                               (Sequence
+                                (=L z x)
+                                (Specification (x (specification e xx (= e x)))
+                                           (Branch
+                                            (=>L (=> (conj (in x xx) (= x x))
+                                                     (in x (specification e xx (= e x)))))
+                                            (Branch AndR I =R)
+                                            I))))))))))

@@ -20,6 +20,9 @@
  exists
  ExistsL
  ExistsR
+ exists!
+ Exists!L
+ Exists!R
  QuantL
  QuantR
  =>
@@ -412,6 +415,7 @@
 
 ; ctx,p[y/x] |- (= t y)   ctx,(= t y) |- p[y/x]
 ; ctx |- (exists! x p)
+; t is the thing, p(y) <=> y = t
 (define-syntax-rule
   (Exists!R (t y) proof1 proof2)
   (Sequence
