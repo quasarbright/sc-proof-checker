@@ -371,7 +371,6 @@
 ; --------------- NotR
 ; ctx |- (not p)
 (define-rule (NotR ctx (neg p))
-  ; todo
   (check-proof/defer
    ctx (neg p)
    (Sequence

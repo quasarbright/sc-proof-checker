@@ -337,22 +337,6 @@
 (define (extend-context ctx . ps)
   (context-union ps ctx))
 
-; TODO move to first order logic
-; (listof Formula) -> (listof Formula)
-; takes the arguments of an and formula
-; and flattens out nested ands
-#;#;(define (flatten-and ps)
-  (foldr (lambda (p flattened)
-           (match p
-             [`(and . ,ps)
-              (append (flatten-and ps) flattened)]
-             [p (cons p flattened)]))
-         '()
-         ps))
-(module+ test
-  (check-equal? (flatten-and '(a1 (and a2 a3) (and (and (and a4 a5) a6))))
-                '(a1 a2 a3 a4 a5 a6)))
-
 ; Context ... -> Context
 (define (context-union . ctxs)
   (apply append ctxs))
@@ -364,15 +348,6 @@
     (in-context? p ctx2)))
 
 ; formula operations
-
-; TODO move to first order logic
-; Formula Formula
-; instantiate a quantification formula
-#;(define (inst p replacement)
-  (match p
-    [(list (or 'forall 'exists) x p-body)
-     (subst p-body x replacement)]
-    [_ (error 'inst "formula not a quantification: ~v" p)]))
 
 ; Formula Formula Formula -> Formula
 ; p[replacement/target]
@@ -427,24 +402,6 @@
 (define (alpha-eqv? p q [pvars (hasheq)] [qvars (hasheq)])
   (equal? (alpha-normalize p) (alpha-normalize q)))
 
-; TODO move to first order logic
-#;(module+ test
-  (check-true (alpha-eqv? 'a 'a))
-  (check-false (alpha-eqv? 'a 'b))
-  (check-true (alpha-eqv? '(forall a a) '(forall b b)))
-  (check-true (alpha-eqv? '(exists a a) '(exists b b)))
-  (check-false (alpha-eqv? '(forall a a) '(exists b b)))
-  (check-true (alpha-eqv? '(forall a (forall b (=> a b)))
-                          '(forall b (forall c (=> b c)))))
-  (check-false (alpha-eqv? '(forall a (forall b (=> a b)))
-                           '(forall b (forall c (and b c)))))
-  (check-false (alpha-eqv? '(forall a (forall b (=> a b)))
-                           '(forall b (forall b (=> b b)))))
-  (check-false (alpha-eqv? '(forall b (forall b (=> b b)))
-                           '(forall a (forall b (=> a b)))))
-  (check-false (alpha-eqv? '(forall a (forall b (=> a b)))
-                           '(forall a (forall b (=> b a))))))
-
 (define (normal-name n) (format-symbol "_.~a" n))
 
 ; rename bound variables in a repeatable way,
@@ -453,14 +410,6 @@
   (if (symbol? p)
       (hash-ref vars p p)
       (gen-alpha-normalize p count vars)))
-
-; TODO move to first order logic
-#;(module+ test
-  (check-equal? (alpha-normalize 'a) 'a)
-  (check-equal? (alpha-normalize '(forall a a))
-                '(forall _.0 _.0))
-  (check-equal? (alpha-normalize '(forall b (forall b (=> b b))))
-                '(forall _.0 (forall _.1 (=> _.1 _.1)))))
 
 ; theories
 
