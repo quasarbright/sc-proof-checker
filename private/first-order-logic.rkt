@@ -81,9 +81,13 @@
 ; rewrites
 
 (define (rewrite-<=> p q) (conj (=> p q) (=> q p)))
-(define-syntax-rule
-  (rewrite-exists! x p)
-  (exists x (forall y (<=> (subst p x y) (= x y)))))
+(define (rewrite-exists! x p)
+  (exists^ x (forall y (<=> (subst p x y) (= x y)))))
+(define (rewrite-exists!/whole p)
+  (match p
+    [(exists! x p) (rewrite-exists! x p)]
+    [_ (error 'rewrite-exists!/whole "not an exists!: ~v" p)]))
+
 (define (rewrite-neg p) (=> p bottom))
 (define (rewrite-bottom) (forall a a))
 (define (rewrite-top) (exists a a))
@@ -92,6 +96,7 @@
   (match p
     [(forall x p) (subst p x q)]
     [(exists x p) (subst p x q)]
+    [(exists! x p) (inst (rewrite-exists! x p) q)]
     [_ (error 'inst "cannot instantiate ~v" p)]))
 
 ; rules
@@ -226,6 +231,7 @@
   (list (/- (extend-context ctx (subst p-body x y)) p)))
 
 ; use to instantiate nested assumption exists
+; TODO use inst like foralll
 (define-syntax ExistsL
   (syntax-rules ()
     [(_ () body ...) (Sequence body ...)]
@@ -246,17 +252,17 @@
 ; Used to instantiate nested assumption foralls
 (define-syntax ForallL
   (syntax-rules ()
-    [(_ _ () proof) proof]
-    [(_ p (t0 t ...) proof)
+    [(_ _ () body ...) (Sequence body ...)]
+    [(_ p (t0 t ...) body ...)
      (let ([pv p]
            [tv t0])
        (Sequence
         (ForallL^ pv tv)
-        (ForallL (inst pv tv) (t ...) proof)))]))
+        (ForallL (inst pv tv) (t ...) body ...)))]))
 
 ; Used to instantiate nested assumption quantifications
 (define-syntax QuantL
-  (syntax-rules (exists forall)
+  (syntax-rules (exists! exists forall)
     [(_ _ () body ...) (Sequence body ...)]
     [(_ p ([exists x] pair ...) body ...)
      (let ([pv p])
@@ -267,9 +273,10 @@
     [(_ p ([forall t] pair ...) body ...)
      (let ([pv p]
            [tv t])
-       (Sequence
-        (ForallL^ pv tv)
-        (QuantL (inst pv tv) (pair ...) body ...)))]))
+       (ForallL pv (tv)
+                (QuantL (inst pv tv) (pair ...) body ...)))]
+    [(_ p ([exists! x t]) body ...)
+     (Exists!L p (x t) body ...)]))
 
 ; ctx |- p[t/x]
 ; ------------------- ExistsR
@@ -290,14 +297,14 @@
 
 ; used for proving nested quantifications
 (define-syntax QuantR
-  (syntax-rules (exists forall)
+  (syntax-rules (exists! exists forall)
     [(_ () body ...) (Sequence body ...)]
     [(_ ([exists t] pair ...) body ...)
-     (Sequence
-      (ExistsR^ t)
-      (QuantR (pair ...) body ...))]
+     (ExistsR (t) (QuantR (pair ...) body ...))]
     [(_ ([forall x] pair ...) body ...)
-     (ForallR (x) (QuantR (pair ...) body ...))]))
+     (ForallR (x) (QuantR (pair ...) body ...))]
+    [(_ ([exists! t y]) proof1 proof2)
+     (Exists!R (t y) proof1 proof2)]))
 
 ; (bottom) ~> (forall a a) in ctx
 (define-rule (BottomL^ ctx p)
@@ -384,26 +391,64 @@
    ctx p
    (Sequence
     <=>L^
-    AndL)))
+    AndL
+    Defer)))
 
 (define-rule (<=>R^ ctx (<=> p q))
   (list (/- ctx (rewrite-<=> p q))))
 
-; ctx |- p => q and q => p
-; ------------------------ <=>R
+; ctx,p |- q   ctx,q |- p
+; ----------------------------- <=>R
 ; ctx |- p <=> q
 (define-rule (<=>R ctx (<=> p q))
   (check-proof/defer
    ctx (<=> p q)
-   <=>R^
-   (Branch AndR Defer Defer)))
+   (Sequence <=>R^
+             (Branch AndR (Sequence =>R Defer) (Sequence =>R Defer)))))
 
+; (exists! x p) ~> (exists x (forall y (<=> p[y/x] (= x y))))
 (define-rule (Exists!R^ ctx (exists! x p))
   (list (/- ctx (rewrite-exists! x p))))
 
-(define-rule ((Exists!L^ (exists! x p)) ctx q)
-  (assert-in-context (exists! x p))
+; ctx,p[y/x] |- (= t y)   ctx,(= t y) |- p[y/x]
+; ctx |- (exists! x p)
+(define-syntax-rule
+  (Exists!R (t y) proof1 proof2)
+  (Sequence
+   Exists!R^
+   (QuantR ([exists t]
+            [forall y])
+           (Branch <=>R proof1 proof2))))
+
+; ctx,(exists! x p) ~> ctx,(exists x (forall y (<=> p[y/x] (= x y))))
+(define-rule ((Exists!L^ (and p-exists (exists! x p))) ctx q)
+  (assert-in-context p-exists)
   (list (/- (extend-context ctx (rewrite-exists! x p)) q)))
+
+; ctx,(exists! x p) ~> ctx,(p[y/x] => y=t),(y=t => p[y/x])
+(define-syntax-rule
+  (Exists!L p (y t) body ...)
+  (let ([pv p])
+    (Sequence
+     (Exists!L^ pv)
+     (QuantL (rewrite-exists!/whole pv)
+             ([exists y] [forall t])
+             <=>L
+             body
+             ...))))
+
+(module+ test
+  (check-not-exn
+   (lambda ()
+     (check-proof
+      (theory->context first-order-logic-theory)
+      (forall a (exists! b (= a b)))
+      (Sequence
+       (ForallR (a)
+                (Exists!R (a y)
+                          I I))))))
+  ; TODO test with exists! in ctx, can't think of anything not stupid
+  )
 
 ; structural
 
