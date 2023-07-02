@@ -2,11 +2,16 @@
 
 ; macros and utilities on top of core to facilitate use
 
+(module+ test (require rackunit))
 (require (for-syntax racket/base
-                     syntax/parse)
+                     syntax/parse
+                     racket/syntax
+                     racket/match)
          racket/contract/base
          racket/match
          racket/syntax
+         racket/struct
+         racket/set
          "./core.rkt")
 
 (provide
@@ -22,23 +27,19 @@
  Sequence
  Branch
  Cuts
+ ; macros for operators
+ define-operator
+ define-variadic-operator
+ define-quantifier
  ; utilities for constructing formulae
  ; core formulae
  fresh
- forall
- exists
  ; built-in rules
  (contract-out
   [Debug rule/c]
   [TrustMe rule/c]
   [NoSubproofs! (-> rule/c rule/c)])
- QuantL
- QuantR
- (rename-out
-  [ExistsR* ExistsR]
-  [ForallR* ForallR]
-  [ExistsL* ExistsL]
-  [ForallL* ForallL])
+ (rename-out)
  define-theorem!)
 
 ; utilities for defining rules
@@ -167,6 +168,153 @@
       lemma-proof
       (Cuts (pairs ...) body ...))]))
 
+; macros for operators
+
+(define-syntax-rule (define-operator (name field ...))
+  (struct name [field ...] #:transparent
+    #:methods gen:formula
+    [(define (gen-subst p target replacement)
+       (match p
+         [(name field ...)
+          (name (subst field target replacement)
+                ...)]))
+     (define (gen-free-vars p)
+       (match p
+         [(name field ...)
+          (set-union '() (free-vars field) ...)]))
+     (define (gen-bound-vars p)
+       (match p
+         [(name field ...)
+          (set-union '() (bound-vars field) ...)]))
+     (define (gen-alpha-normalize p count vars)
+       (match p
+         [(name field ...)
+          (name (alpha-normalize field count vars) ...)]))]))
+
+(define-syntax define-variadic-operator
+  (syntax-parser
+    [(_ name:id ps:id)
+     (define/syntax-parse struct-name (format-id #'name "~a^" (syntax-e #'name)))
+     #'(begin
+         (struct struct-name [ps] #:transparent
+           #:methods gen:formula
+           [(define (gen-subst p target replacement)
+              (match p
+                [(struct-name ps)
+                 (struct-name (for/list ([p ps])
+                                (subst p target replacement)))]))
+            (define (gen-free-vars p)
+              (match p
+                [(struct-name ps)
+                 (apply set-union '() (map free-vars ps))]))
+            (define (gen-bound-vars p)
+              (match p
+                [(struct-name ps)
+                 (apply set-union '() (map bound-vars ps))]))
+            (define (gen-alpha-normalize p count vars)
+              (match p
+                [(struct-name ps)
+                 (struct-name (for/list ([p ps]) (alpha-normalize p count vars)))]))]
+           #:methods gen:custom-write
+           [(define write-proc (make-constructor-style-printer
+                                (lambda (_) 'name)
+                                (lambda (p) (match p [(struct-name ps) ps]))))])
+         (define-match-expander name
+           (syntax-rules ()
+             [(_ . pat)
+              (struct-name (list . pat))])
+           (syntax-rules ()
+             [(_ p (... ...)) (struct-name (list p (... ...)))])))]))
+
+(define-syntax define-quantifier
+  (syntax-parser
+    [(_ (name x p))
+     (define/syntax-parse struct-name (format-id #'name "~a^" (syntax-e #'name)))
+     #'(begin
+         (struct struct-name [x p] #:transparent
+           #:methods gen:formula
+           [(define (gen-subst p target replacement)
+              (match p
+                [(struct-name x body)
+                 (if (occurs-free? x target)
+                     p
+                     (struct-name x (subst body target replacement)))]))
+            (define (gen-free-vars p)
+              (match p
+                [(struct-name x p)
+                 (set-subtract (free-vars p) (list x))]))
+            (define (gen-bound-vars p)
+              (match p
+                [(struct-name x p)
+                 (cons x (bound-vars p))]))
+            (define (gen-alpha-normalize p count vars)
+              (define v (normal-name count))
+              (match p
+                [(struct-name x p)
+                 (struct-name v (alpha-normalize p (add1 count) (hash-set vars x v)))]))]
+           #:methods gen:custom-write
+           [(define write-proc (make-constructor-style-printer
+                                (lambda (_) 'name)
+                                (lambda (p) (match p [(struct-name x p) (list x p)]))))])
+         (define-match-expander name
+           (syntax-rules ()
+             [(_ () p) p]
+             [(_ (x0 x (... ...)) p) (struct-name x0 (name (x (... ...)) p))]
+             [(_ x p) (name (x) p)])
+           (syntax-rules ()
+             [(_ () p) p]
+             [(_ (x0 x (... ...)) p)
+              (fresh (x0) (struct-name x0 (name (x (... ...)) p)))]
+             [(_ x p) (name (x) p)])))]))
+
+(module+ test
+  (define-operator (conj2 a b))
+  (check-equal?
+   (match (conj2 'a 'b)
+     [(conj2 a b) a])
+   'a)
+  (check-equal? (free-vars (conj2 'a 'b))
+                '(b a))
+
+  (define-variadic-operator conj ps)
+  (check-equal?
+   (match (conj 'a 'b 'c)
+     [(conj a b c)
+      a])
+   'a)
+  (check-equal? (free-vars (conj 'a 'b 'c))
+                '(c b a))
+
+  (define-quantifier (forall x p))
+  (define-quantifier (exists x p))
+  (check-true
+   (match (match (forall (x y) x)
+            [(forall (x y) z) (list x y z)])
+     [(list a b a) #t]
+     [_ #f]))
+  (check-true
+   (alpha-eqv? (subst (forall q (conj2 (conj 'p 'p) q))
+                      'p
+                      'r)
+               (forall q (conj2 (conj 'r 'r) q))))
+  (check-equal? (alpha-normalize (forall (x y) x))
+                (forall^ '_.0 (forall^ '_.1 '_.0)))
+
+  (check-true (alpha-eqv? 'a 'a))
+  (check-false (alpha-eqv? 'a 'b))
+  (check-true (alpha-eqv? (forall a a) (forall b b)))
+  (check-false (alpha-eqv? (forall a a) (exists b b)))
+  (check-true (alpha-eqv? (forall a (forall b (conj a b)))
+                          (forall b (forall c (conj b c)))))
+  (check-false (alpha-eqv? (forall a (forall b (conj a b)))
+                           (forall b (forall c (conj2 b c)))))
+  (check-false (alpha-eqv? (forall a (forall b (conj a b)))
+                           (forall b (forall b (conj b b)))))
+  (check-false (alpha-eqv? (forall b (forall b (conj b b)))
+                           (forall a (forall b (conj a b)))))
+  (check-false (alpha-eqv? (forall a (forall b (conj a b)))
+                           (forall a (forall b (conj b a))))))
+
 ; macros for formulae
 
 (define-syntax-rule
@@ -183,123 +331,6 @@
 ; symbol? natural? -> symbol?
 (define (mk-var x n) (format-symbol "~a:~a" x n))
 
-(define-syntax forall
-  (syntax-rules ()
-    [(_ () p) p]
-    [(_ (x0 x ...) p)
-     (fresh (x0) (list 'forall x0 (forall (x ...) p)))]
-    [(_ x p) (forall (x) p)]))
-(define-syntax exists
-  (syntax-rules ()
-    [(_ () p) p]
-    [(_ (x0 x ...) p)
-     (fresh (x0) (list 'exists x0 (exists (x ...) p)))]
-    [(_ x p) (exists (x) p)]))
-
-; built-in rules
-
-; ctx |- p-body[y/x]
-; ------------------------ ForallR
-; ctx |- (forall x p-body)
-(define-rule ((ForallR y) ctx (and p `(forall ,x ,p-body)))
-  ; important to use p. x = y can be ok
-  (when (or (occurs-free? y p) (occurs-free?/context y ctx))
-    (error "cannot instantiate forall with a variable that occurs free in lower sequents"))
-  (list (/- ctx (subst p-body x y))))
-
-; use to instantiate nested conclusion foralls
-(define-syntax ForallR*
-  (syntax-rules ()
-    [(_ () body ...) (Sequence body ...)]
-    [(_ (x0 x ...) body ...)
-     (fresh
-      (x0)
-      (Sequence
-       (ForallR x0)
-       (ForallR* (x ...) body ...)))]))
-
-; ctx, p-body[y/x] |- p
-; --------------------------- ExistsL
-; ctx, (exists x p-body) |- p
-(define-rule ((ExistsL `(exists ,x ,p-body) y) ctx p)
-  (when (or (occurs-free? y p) (occurs-free?/context y ctx))
-    (error 'ExistsL "cannot instantiate existential with a variable that occurs free in lower sequents"))
-  (list (/- (extend-context ctx (subst p-body x y)) p)))
-
-; use to instantiate nested assumption exists
-(define-syntax ExistsL*
-  (syntax-rules ()
-    [(_ () body ...) (Sequence body ...)]
-    [(_ ([x p-exists] pair ...) body ...)
-     (fresh
-      (x)
-      (Sequence
-       (ExistsL p-exists x)
-       (ExistsL* (pair ...) body ...)))]))
-
-; (forall x p-body) in ctx    ctx,p-body[t/x] |- p
-; ------------------------------------------------ ForallL
-; ctx |- p
-(define-rule ((ForallL (and p-forall `(forall ,x ,p-body)) t) ctx p)
-  (assert-in-context p-forall)
-  (list (/- (extend-context ctx (subst p-body x t)) p)))
-
-; Used to instantiate nested assumption foralls
-(define-syntax ForallL*
-  (syntax-rules ()
-    [(_ _ () proof) proof]
-    [(_ p (t0 t ...) proof)
-     (let ([pv p]
-           [tv t0])
-       (Sequence
-        (ForallL pv tv)
-        (ForallL* (inst pv tv) (t ...) proof)))]))
-
-; Used to instantiate nested assumption quantifications
-(define-syntax QuantL
-  (syntax-rules (exists forall)
-    [(_ _ () body ...) (Sequence body ...)]
-    [(_ p ([exists x] pair ...) body ...)
-     (let ([pv p])
-       (Sequence
-        (ExistsL*
-         ([x pv])
-         (QuantL (inst pv x) (pair ...) body ...))))]
-    [(_ p ([forall t] pair ...) body ...)
-     (let ([pv p]
-           [tv t])
-       (Sequence
-        (ForallL pv tv)
-        (QuantL (inst pv tv) (pair ...) body ...)))]))
-
-; ctx |- p[t/x]
-; ------------------- ExistsR
-; ctx |- (exists x p)
-; if you can prove that a t satisfies p,
-; t is something that exists that satisfied p!
-(define-rule ((ExistsR t) ctx `(exists ,x ,p))
-  (list (/- ctx (subst p x t))))
-
-; used for proving nested existentials
-(define-syntax ExistsR*
-  (syntax-rules ()
-    [(_ () body ...) (Sequence body ...)]
-    [(_ (t0 t ...) body ...)
-     (Sequence
-      (ExistsR t0)
-      (ExistsR* (t ...) body ...))]))
-
-; used for proving nested quantifications
-(define-syntax QuantR
-  (syntax-rules (exists forall)
-    [(_ () body ...) (Sequence body ...)]
-    [(_ ([exists t] pair ...) body ...)
-     (Sequence
-      (ExistsR t)
-      (QuantR (pair ...) body ...))]
-    [(_ ([forall x] pair ...) body ...)
-     (ForallR* (x) (QuantR (pair ...) body ...))]))
-
 ; -------- Debug
 ; ctx |- p
 ; Used to view the context and formula to prove.
@@ -307,9 +338,9 @@
 (define-rule (Debug ctx p)
   (displayln "given")
   ; assumes ctx is a list
-  (for ([p (reverse ctx)]) (displayln p))
+  (for ([p (reverse ctx)]) (println p))
   (displayln "prove")
-  (displayln p)
+  (println p)
   '())
 
 ; -------- TrustMe
@@ -324,7 +355,7 @@
   (define subs (rul ctx p))
   (if (null? subs)
       subs
-      (error 'NoSubproofs! "Rule ~a was unable to automatically prove ~a" rul p)))
+      (error 'NoSubproofs! "Rule ~v was unable to automatically prove ~v" rul p)))
 
 ; theories
 

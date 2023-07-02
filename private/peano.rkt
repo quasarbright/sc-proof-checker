@@ -12,10 +12,10 @@
 
 ; operators
 (define zero 'zero)
-(define (S n) `(S ,n))
-(define (nat? n) `(nat? ,n))
-(define (add a b) `(add ,a ,b))
-(define (mul a b) `(mul ,a ,b))
+(define-operator (S n))
+(define-operator (nat? n))
+(define-operator (add a b))
+(define-operator (mul a b))
 
 ; axioms
 
@@ -33,7 +33,7 @@
 ; ctx |- (nat? n)
 ; ------------------- SuccNat
 ; ctx |- (nat? (S n))
-(define-rule (SuccNat ctx (and p `(nat? (S ,n))))
+(define-rule (SuccNat ctx (and p (nat? (S n))))
   (assert-in-context succ-is-nat-axiom)
   (check-proof/defer
    ctx p
@@ -58,7 +58,7 @@
 ; ctx |- p[zero/x]   ctx |- (forall n ((nat? n) and p[n/x]) => p[(succ n)/x])
 ; --------------------------------------------------------------------------- NatInduction
 ; ctx |- (forall x (=> (nat? x) p))
-(define-rule (NatInduction ctx `(forall ,x (=> (nat? ,x) ,p)))
+(define-rule (NatInduction ctx (forall x (=> (nat? x) p)))
   (list (/- ctx (subst p x zero))
         (/- ctx (forall n (=> (conj (nat? n) (subst p x n))
                               (subst p x (S n)))))))
@@ -131,7 +131,7 @@
                            mul-zero-axiom
                            mul-succ-axiom))
 
-(define peano (theory peano-axioms (list)))
+(define peano (theory peano-axioms))
 
 (module+ test
   (check-not-exn
@@ -164,6 +164,7 @@
     NatInduction
     (Sequence
      (AddZero a)
+     ; here
      I)
     (ForallR
      (n)
@@ -178,7 +179,7 @@
 ; ctx |- (nat? a)   ctx |- (nat? b)
 ; --------------------------------- AddNat
 ; ctx |- (nat? (add a b))
-(define-rule (AddNat ctx (and p `(nat? (add ,a ,b))))
+(define-rule (AddNat ctx (and p (nat? (add a b))))
   (assert-in-context additive-closure)
   (check-proof/defer
    ctx p
@@ -220,7 +221,7 @@
 ; ctx |- (nat? a)   ctx |- (nat? b)
 ; --------------------------------- MulNat
 ; ctx |- (nat? (mul a b))
-(define-rule (MulNat ctx (and p `(nat? (mul ,a ,b))))
+(define-rule (MulNat ctx (and p (nat? (mul a b))))
   (assert-in-context multiplicative-closure)
   (check-proof/defer
    ctx p
@@ -240,22 +241,22 @@
 
 ; checked auto rule for proving a natural
 ; pretty cool
-(define-rule (NatR ctx (and p `(nat? ,n)))
+(define-rule (NatR ctx (and p (nat? n)))
   (match n
     [(== zero alpha-eqv?)
      (assert-in-context zero-is-nat-axiom)
      (check-proof/defer ctx p I)]
-    [`(S ,_)
+    [(S _)
      (assert-in-context succ-is-nat-axiom)
      (check-proof/defer
       ctx p
       (Sequence SuccNat NatR))]
-    [`(mul ,_ ,_)
+    [(mul _ _)
      (assert-in-context multiplicative-closure)
      (check-proof/defer
       ctx p
       (Branch MulNat NatR NatR))]
-    [`(add ,_ ,_)
+    [(add _ _)
      (assert-in-context additive-closure)
      (check-proof/defer
       ctx p
@@ -269,7 +270,7 @@
 ; (nat? t) obvious in ctx   ctx, p[t/n] |- q
 ; ------------------------------------------ ForallNatL^
 ; ctx,(forall n (=> (nat? n) p)) |- q
-(define-rule ((ForallNatL^ (and p-forall-nat `(forall ,n (=> (nat? ,n) ,_))) t) ctx p)
+(define-rule ((ForallNatL^ (and p-forall-nat (forall n (=> (nat? n) _))) t) ctx p)
   (check-proof/defer
    ctx p
    (ForallL p-forall-nat (t)
@@ -298,9 +299,9 @@
 ; like inst, but gets rid of the nat impl and only for foralls
 (define (inst/nat p replacement)
   (match p
-    [`(forall ,n (=> (nat? ,n) ,p))
+    [(forall n (=> (nat? n) p))
      (subst p n replacement)]
-    [_ (error 'inst/nat "formula not a forall-nat: ~a" p)]))
+    [_ (error 'inst/nat "formula not a forall-nat: ~v" p)]))
 
 (define-theorem! additive-commutativity
   peano (forall-nat a (forall-nat b (= (add a b) (add b a))))
@@ -313,6 +314,7 @@
      (n)
      (Sequence
       =>R
+      AndL
       (Cuts
        ([(= (add zero (S n)) (S n))
          (Sequence

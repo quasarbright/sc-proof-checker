@@ -11,19 +11,27 @@
 
 (provide
  ; core operators
+ disj
+ conj
+ inst
+ forall
+ ForallL
+ ForallR
+ exists
+ ExistsL
+ ExistsR
+ QuantL
+ QuantR
+ =>
+ =
  (contract-out
-  [=> (-> formula? formula? formula?)]
-  [= (-> formula? formula? formula?)]
-  [disj (->* (formula?) #:rest (listof formula?) formula?)]
-  [conj (->* (formula?) #:rest (listof formula?) formula?)]
   [first-order-logic-theory theory/c])
  ; derived operators/formulae
+ <=>
+ neg
  exists!
  bottom
  top
- (contract-out
-  [<=> (-> formula? formula? formula?)]
-  [neg (-> formula? formula?)])
  (contract-out
   ; rules
   ; intro and elim
@@ -50,37 +58,41 @@
   ; useful checked rules
   [ModusPonens (-> formula? rule/c)]))
 
-; core operators
-
-(define (=> p q) (list '=> p q))
-; shadows number =, but whatever
-(define (= t1 t2) (list '= t1 t2))
-
-; these really aren't necessary, but they're worth including
-(define (disj p . ps) (list* 'or p ps))
-(define (conj p . ps) (list* 'and p ps))
+(define-quantifier (forall x p))
+(define-quantifier (exists x p))
+(define-operator (=> p q))
+(define-operator (= p q))
+(define-variadic-operator disj ps)
+(define-variadic-operator conj ps)
+; bidirectional implication
+(define-operator (<=> p q))
+; unique existence
+(define-quantifier (exists! x p))
+; can be used to prove anything, impossible to prove (without itself or equivalent)
+(define bottom 'bottom)
+; logical negation
+(define-operator (neg p))
+; useless as an assumption (except to prove itself kind of), can always be proven
+(define top 'top)
 
 (define first-order-logic-theory
-  (theory (list)
-          (list (operator '=> 2)
-                (operator '= 2)
-                (operator 'and (arity-at-least 1))
-                (operator 'or (arity-at-least 1)))))
+  (theory (list)))
 
-; derived operators/formulae
+; rewrites
 
-; bidirectional implication
-(define (<=> p q) (conj (=> p q) (=> q p)))
-; unique existence
-(define-syntax-rule (exists! x p)
-  ; it's guaranteed that y is not free in p because exists uses fresh
+(define (rewrite-<=> p q) (conj (=> p q) (=> q p)))
+(define-syntax-rule
+  (rewrite-exists! x p)
   (exists x (forall y (<=> (subst p x y) (= x y)))))
-; can be used to prove anything, impossible to prove (without itself or equivalent)
-(define bottom (forall a a))
-; logical negation
-(define (neg p) (=> p bottom))
-; useless as an assumption (except to prove itself kind of), can always be proven
-(define top (exists a a))
+(define (rewrite-neg p) (=> p bottom))
+(define (rewrite-bottom) (forall a a))
+(define (rewrite-top) (exists a a))
+
+(define (inst p q)
+  (match p
+    [(forall x p) (subst p x q)]
+    [(exists x p) (subst p x q)]
+    [_ (error 'inst "cannot instantiate ~v" p)]))
 
 ; rules
 
@@ -90,16 +102,16 @@
 ; ----------------------------- =>L^
 ; ctx, p=>q |- r or s
 ; included for completeness. Annoying to use
-(define-rule ((=>L^ (and impl `(=> ,p ,q))) ctx `(or ,r ,s))
+(define-rule ((=>L^ (and impl (=> p q))) ctx (disj r s))
   (assert-in-context impl)
-  (list (/- ctx `(or ,p ,r))
+  (list (/- ctx (disj p r))
         (/- (extend-context ctx q) s)))
 
 ; ctx |- p    ctx, p, q |- r
 ; ----------------------- =>L
 ; ctx, p=>q |- r
 ; to use an implication, prove the antecedent, then use the consequent
-(define-rule ((=>L (and impl `(=> ,p ,q))) ctx r)
+(define-rule ((=>L (and impl (=> p q))) ctx r)
   (assert-in-context impl)
   (check-proof/defer
    ctx r
@@ -113,7 +125,7 @@
 ; ctx,p |- q
 ; ------------- =>R
 ; ctx |- p => q
-(define-rule (=>R ctx `(=> ,p ,q))
+(define-rule (=>R ctx (=> p q))
   (list (/- (extend-context ctx p) q)))
 
 ; ctx |- p[t2/t1]
@@ -123,12 +135,12 @@
 (define-rule ((=L target replacement) ctx p)
   (unless (or (in-context? (= target replacement) ctx)
               (in-context? (= replacement target) ctx))
-    (error '=L "couldn't find equality in context ~a" (= target replacement)))
+    (error '=L "couldn't find equality in context ~v" (= target replacement)))
   (list (/- ctx (subst p target replacement))))
 
 ; ------------ =R
 ; ctx |- t = t
-(define-rule (=R ctx `(= ,p ,q))
+(define-rule (=R ctx (= p q))
   (unless (alpha-eqv? p q)
     (error '=R "terms are not equal: ~v vs ~v" p q))
   '())
@@ -136,26 +148,26 @@
 ; ctx,p |- r   ctx,q |- r ...
 ; --------------------------- OrL
 ; ctx,p or q or ... |- r
-(define-rule ((OrL `(or ,ps ...)) ctx r)
+(define-rule ((OrL (disj ps ...)) ctx r)
   (for/list ([p ps])
     (/- (extend-context ctx p) r)))
 
 ; ctx |- p
 ; ------------- OrR1
 ; ctx |- p or q
-(define-rule (OrR1 ctx `(or ,p ,_))
+(define-rule (OrR1 ctx (disj p _))
   (list (/- ctx p)))
 
 ; ctx |- q
 ; ------------- OrR2
 ; ctx |- p or q
-(define-rule (OrR2 ctx `(or ,_ ,q))
+(define-rule (OrR2 ctx (disj _ q))
   (list (/- ctx q)))
 
 ; ctx |- p
 ; ---------------------------------- OrR
 ; ctx |- p1 or ... or p or ... or pn
-(define-rule ((OrR p) ctx `(or ,ps ...))
+(define-rule ((OrR p) ctx (disj ps ...))
   (unless (member p ps alpha-eqv?)
     (error 'OrR "Rule not applicable. Formula not found in conjunction: ~v vs ~v" p (cons 'or ps)))
   (list (/- ctx p)))
@@ -163,14 +175,13 @@
 ; ctx,a,b |- p
 ; ------------- AndL
 ; ctx, a^b |- p
-; unfolds all ands automatically
-; There should never be an and in the ctx.
+; unfolds all ands automatically (shallowly)
+; TODO deep
 (define-rule (AndL ctx p)
   (define ctx^ (foldr (lambda (p ctx)
                         (match p
-                          [`(and . ,ps)
-                           (context-union (apply context (flatten-and ps))
-                                           ctx)]
+                          [(conj ps ...)
+                           (context-union ps ctx)]
                           [_ (extend-context ctx p)]))
                       '()
                       ctx))
@@ -179,9 +190,119 @@
 ; ctx |- p1   ctx |- p2
 ; ---------------------
 ; ctx |- p1 and p2
-(define-rule (AndR ctx `(and ,ps ...))
+(define-rule (AndR ctx (conj ps ...))
   (for/list ([p ps])
     (/- ctx p)))
+
+
+; built-in rules
+
+; ctx |- p-body[y/x]
+; ------------------------ ForallR
+; ctx |- (forall x p-body)
+(define-rule ((ForallR^ y) ctx (and p (forall x p-body)))
+  ; important to use p. x = y can be ok
+  (when (or (occurs-free? y p) (occurs-free?/context y ctx))
+    (error "cannot instantiate forall with a variable that occurs free in lower sequents"))
+  (list (/- ctx (subst p-body x y))))
+
+; use to instantiate nested conclusion foralls
+(define-syntax ForallR
+  (syntax-rules ()
+    [(_ () body ...) (Sequence body ...)]
+    [(_ (x0 x ...) body ...)
+     (fresh
+      (x0)
+      (Sequence
+       (ForallR^ x0)
+       (ForallR (x ...) body ...)))]))
+
+; ctx, p-body[y/x] |- p
+; --------------------------- ExistsL
+; ctx, (exists x p-body) |- p
+(define-rule ((ExistsL^ (exists x p-body) y) ctx p)
+  (when (or (occurs-free? y p) (occurs-free?/context y ctx))
+    (error 'ExistsL "cannot instantiate existential with a variable that occurs free in lower sequents"))
+  (list (/- (extend-context ctx (subst p-body x y)) p)))
+
+; use to instantiate nested assumption exists
+(define-syntax ExistsL
+  (syntax-rules ()
+    [(_ () body ...) (Sequence body ...)]
+    [(_ ([x p-exists] pair ...) body ...)
+     (fresh
+      (x)
+      (Sequence
+       (ExistsL^ p-exists x)
+       (ExistsL (pair ...) body ...)))]))
+
+; (forall x p-body) in ctx    ctx,p-body[t/x] |- p
+; ------------------------------------------------ ForallL
+; ctx |- p
+(define-rule ((ForallL^ (and p-forall (forall x p-body)) t) ctx p)
+  (assert-in-context p-forall)
+  (list (/- (extend-context ctx (subst p-body x t)) p)))
+
+; Used to instantiate nested assumption foralls
+(define-syntax ForallL
+  (syntax-rules ()
+    [(_ _ () proof) proof]
+    [(_ p (t0 t ...) proof)
+     (let ([pv p]
+           [tv t0])
+       (Sequence
+        (ForallL^ pv tv)
+        (ForallL (inst pv tv) (t ...) proof)))]))
+
+; Used to instantiate nested assumption quantifications
+(define-syntax QuantL
+  (syntax-rules (exists forall)
+    [(_ _ () body ...) (Sequence body ...)]
+    [(_ p ([exists x] pair ...) body ...)
+     (let ([pv p])
+       (Sequence
+        (ExistsL
+         ([x pv])
+         (QuantL (inst pv x) (pair ...) body ...))))]
+    [(_ p ([forall t] pair ...) body ...)
+     (let ([pv p]
+           [tv t])
+       (Sequence
+        (ForallL^ pv tv)
+        (QuantL (inst pv tv) (pair ...) body ...)))]))
+
+; ctx |- p[t/x]
+; ------------------- ExistsR
+; ctx |- (exists x p)
+; if you can prove that a t satisfies p,
+; t is something that exists that satisfied p!
+(define-rule ((ExistsR^ t) ctx (exists x p))
+  (list (/- ctx (subst p x t))))
+
+; used for proving nested existentials
+(define-syntax ExistsR
+  (syntax-rules ()
+    [(_ () body ...) (Sequence body ...)]
+    [(_ (t0 t ...) body ...)
+     (Sequence
+      (ExistsR^ t0)
+      (ExistsR (t ...) body ...))]))
+
+; used for proving nested quantifications
+(define-syntax QuantR
+  (syntax-rules (exists forall)
+    [(_ () body ...) (Sequence body ...)]
+    [(_ ([exists t] pair ...) body ...)
+     (Sequence
+      (ExistsR^ t)
+      (QuantR (pair ...) body ...))]
+    [(_ ([forall x] pair ...) body ...)
+     (ForallR (x) (QuantR (pair ...) body ...))]))
+
+; (bottom) ~> (forall a a) in ctx
+(define-rule (BottomL^ ctx p)
+  (assert-in-context 'bottom)
+  (list (/- (extend-context ctx (rewrite-bottom)) p)))
 
 ; --------------- BottomL
 ; ctx,bottom |- p
@@ -189,50 +310,100 @@
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallL bottom (p) I))))
+    BottomL^
+    (ForallL (rewrite-bottom) (p) I))))
+
+(define-rule (BottomR ctx 'bottom)
+  (list (/- ctx (rewrite-bottom))))
+
+; (top) ~> (exists a a)
+(define-rule (TopR^ ctx 'top)
+  (list (/- ctx (rewrite-top))))
 
 ; ---------- TopR
 ; ctx |- top
 ; ctx must not be empty
-(define-rule (TopR ctx p)
+(define-rule (TopR ctx 'top)
   (when (null? ctx)
     (error 'TopR "contex is empty"))
   (check-proof/defer
-   ctx p
+   ctx 'top
    (Sequence
+    TopR^
     (ExistsR ((car ctx)) I))))
+
+; (neg p) ~> (=> p bottom) in ctx
+(define-rule ((NotL^ p) ctx q)
+  (assert-in-context (neg p))
+  (list (/- (extend-context ctx (rewrite-neg p)) q)))
 
 ; ctx, (not p) |- p
 ; ----------------- NotL
 ; ctx, (not p) |- q
 ; proof by contradiction
 (define-rule ((NotL p) ctx q)
-  ; TODO make this take in neg p once we have pattern expanders
   (assert-in-context (neg p))
   (check-proof/defer
    ctx q
    (Cuts
     ([p Defer])
+    (NotL^ p)
     (Branch
-     (=>L (neg p))
+     (=>L (rewrite-neg p))
      I
      BottomL))))
+
+; (neg p) ~> (=> p bottom)
+(define-rule (NotR^ ctx (neg p))
+  (list (/- ctx (rewrite-neg p))))
 
 ; ctx p |- bottom
 ; --------------- NotR
 ; ctx |- (not p)
-(define-rule (NotR ctx p) (=>R ctx p))
+(define-rule (NotR ctx (neg p))
+  ; todo
+  (check-proof/defer
+   ctx (neg p)
+   (Sequence
+    NotR^
+    =>R
+    Defer)))
 
-; ---------------- <=>L
-; ctx,p <=> q |- r
-(define-rule (<=>L ctx p) (AndL ctx p))
+; (<=> p q) ~> (conj (=> p q) (=> q p)) in ctx, apply to all
+(define-rule (<=>L^ ctx p)
+  (list (/- (for/list ([p ctx])
+              (match p
+                [(<=> p q) (conj (=> p q) (=> q p))]
+                [p p]))
+            p)))
+
+
+; <=> rewrite and AndL
+(define-rule (<=>L ctx p)
+  (check-proof/defer
+   ctx p
+   (Sequence
+    <=>L^
+    AndL)))
+
+(define-rule (<=>R^ ctx (<=> p q))
+  (list (/- ctx (rewrite-<=> p q))))
 
 ; ctx |- p => q and q => p
 ; ------------------------ <=>R
 ; ctx |- p <=> q
-(define-rule (<=>R ctx p) (AndR ctx p))
+(define-rule (<=>R ctx (<=> p q))
+  (check-proof/defer
+   ctx (<=> p q)
+   <=>R^
+   (Branch AndR Defer Defer)))
 
-; not doing exists!L/R
+(define-rule (Exists!R^ ctx (exists! x p))
+  (list (/- ctx (rewrite-exists! x p))))
+
+(define-rule ((Exists!L^ (exists! x p)) ctx q)
+  (assert-in-context (exists! x p))
+  (list (/- (extend-context ctx (rewrite-exists! x p)) q)))
 
 ; structural
 
@@ -240,14 +411,14 @@
 ; ------------- CR
 ; ctx |- p
 (define-rule (CR ctx p)
-  (list (/- ctx `(or ,p ,p))))
+  (list (/- ctx (disj p p))))
 
 ; useful checked rules
 
 ; --------------- ModusPonens
 ; ctx,p,p=>q |- q
 (define-rule ((ModusPonens p) ctx q)
-  (assert-in-context `(=> ,p ,q))
+  (assert-in-context (=> p q))
   (assert-in-context p)
   (check-proof/defer
    ctx q
@@ -275,12 +446,14 @@
       ; there does not exists something that is not equal to itself
       '() (neg (exists x (neg (= x x))))
       (Sequence
+       NotR^
        =>R
        ; assume there does exist such a thing
        (ExistsL
         ([x (exists x (neg (= x x)))])
+        (NotL^ (= x x))
         (Branch
-         (=>L (neg (= x x)))
+         (=>L (rewrite-neg (= x x)))
          =R
          BottomL))))))
   ; dual of proof by contradiction just for fun
@@ -317,25 +490,26 @@
        (Sequence
         =>R
         AndL
+        (NotL^ p)
         (Branch
-         (=>L (neg p))
+         (=>L (rewrite-neg p))
          I
          BottomL))))))
   ; absurd
   (check-not-exn
    (lambda ()
      (check-proof
-      '() (forall p (=> bottom p))
+      '() (forall p (=> (rewrite-bottom) p))
       (ForallR
        (p)
        (Sequence
         =>R
-        (ForallL bottom (p) I))))))
+        (ForallL (rewrite-bottom) (p) I))))))
   ; dual of absurd, idk what you'd call it
   (check-not-exn
    (lambda ()
      (check-proof
-      '() (forall p (=> p top))
+      '() (forall p (=> p (rewrite-top)))
       (ForallR
        (p)
        (Sequence
@@ -389,21 +563,18 @@
    (lambda ()
      (check-proof
       '() (forall p (forall q (=> (conj p (=> p q)) q)))
-      (fresh
+      (ForallR
        (p q)
        (Sequence
-        (ForallR
-         (p q)
+        =>R
+        AndL
+        CR
+        (Branch
+         (=>L^ (=> p q))
          (Sequence
-          =>R
-          AndL
-          CR
-          (Branch
-           (=>L^ (=> p q))
-           (Sequence
-            OrR1
-            I)
-           I))))))))
+          OrR1
+          I)
+         I))))))
   ; absurd
   (check-not-exn
    (lambda ()

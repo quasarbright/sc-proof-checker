@@ -8,9 +8,7 @@
 
 ; operators
 
-(define (in e s) (list 'in e s))
-
-(define zfc-operators (list (operator 'in 2)))
+(define-operator (in e s))
 
 ; axioms/rules
 
@@ -35,8 +33,8 @@
 ; --------------------------------------------------------------- Specification
 ; ctx |- (exists y (forall x (<=> (in x y) (and (in x z) pred))))
 ; You can specify a set by specifying a superset and a predicate
-(define-rule (Specification ctx `(exists ,y (forall ,x (and (=> (in ,x ,y) (and (in ,x ,z) ,pred))
-                                                            (=> (and (in ,x ,z) ,pred) (in ,x ,y))))))
+(define-rule (Specification ctx (exists y (forall x (conj (=> (in x y) (conj (in x z) pred))
+                                                            (=> (conj (in x z) pred) (in x y))))))
   '())
 
 (define pairing
@@ -47,7 +45,7 @@
                                                    (in Y F))
                                               (in x A)))))))
 
-(define (self-union F) `(self-union ,F))
+(define-operator (self-union F))
 (define (is-self-union? F uF)
   (forall (Y x) (<=> (in x uF) (conj (in x Y) (in Y F)))))
 ; TODO unique existence theorem
@@ -56,17 +54,17 @@
 
 ; TODO replacement
 
-(define (singleton x) `(singleton ,x))
+(define-operator (singleton x))
 (define (is-singleton? x sx) (forall e (<=> (in e sx) (= e x))))
 (define axiom-for-singleton (forall x (is-singleton? x (singleton x))))
 
-(define (U x y) `(U ,x ,y))
+(define-operator (U x y))
 (define (is-binary-union? x y u)
   (forall e (<=> (in e u) (or (in e x) (in e y)))))
 ; TODO unique existence theorem
 ; TODO axiom
 ; TODO operator
-(define (S x) `(S ,x))
+(define-operator (S x))
 (define (is-successor? x sx) (= sx (U x (singleton x))))
 ; TODO unique existence theorem
 ; TODO axiom
@@ -82,7 +80,7 @@
 (define axiom-of-power-set
   (forall x (exists px (forall z (=> (is-subset? z x) (in z px))))))
 
-(define (P x) `(P ,x))
+(define-operator (P x))
 (define (is-power-set? x px)
   (forall z (<=> (is-subset? z x) (in z px))))
 ; TODO unique existence theorem
@@ -100,15 +98,15 @@
         axiom-of-power-set
         axiom-for-singleton))
 
-(define zfc (theory zfc-axioms zfc-operators))
+(define zfc (theory zfc-axioms))
 
 ; ctx |- (forall z (in z x) <=> (in z y))
 ; --------------------------------------- Extensionality
 ; ctx |- (= x y)
-(define-rule (Extensionality ctx `(= ,x ,y))
+(define-rule (Extensionality ctx (= x y))
   (assert-in-context extensionality)
   (check-proof/defer
-   ctx `(= ,x ,y)
+   ctx (= x y)
    (Sequence
     (ForallL
      extensionality (x y)
