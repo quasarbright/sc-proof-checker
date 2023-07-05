@@ -237,6 +237,8 @@
            [(define (gen-subst p target replacement)
               (match p
                 [(struct-name x body)
+                 (when (occurs-free? x replacement)
+                   (error 'subst "substitution results in name capture"))
                  (if (occurs-free? x target)
                      p
                      (struct-name x (subst body target replacement)))]))
