@@ -42,6 +42,7 @@
   [=>L (-> formula? rule/c)]
   [=>R rule/c]
   [=L (-> formula? formula? rule/c)]
+  [=LL (-> formula? formula? formula? rule/c)]
   [=R rule/c]
   [OrL (-> formula? rule/c)]
   [OrR1 rule/c]
@@ -59,7 +60,7 @@
   ; structural
   [CR rule/c]
   ; useful checked rules
-  [ModusPonens (-> formula? rule/c)]))
+  [ModusPonens (-> formula? formula? rule/c)]))
 
 (define-quantifier (forall x p))
 (define-quantifier (exists x p))
@@ -145,6 +146,14 @@
               (in-context? (= replacement target) ctx))
     (error '=L "couldn't find equality in context ~v" (= target replacement)))
   (list (/- ctx (subst p target replacement))))
+
+; Like =L, but operates on an assumption instead of the statement being proven
+(define-rule ((=LL p target replacement) ctx q)
+  (unless (or (in-context? (= target replacement) ctx)
+              (in-context? (= replacement target) ctx))
+    (error '=L "couldn't find equality in context ~v" (= target replacement)))
+  (assert-in-context p)
+  (list (/- (extend-context ctx (subst p target replacement)) q)))
 
 ; ------------ =R
 ; ctx |- t = t
@@ -463,9 +472,10 @@
 
 ; useful checked rules
 
+; ctx,q |- r
 ; --------------- ModusPonens
-; ctx,p,p=>q |- q
-(define-rule ((ModusPonens p) ctx q)
+; ctx,p,p=>q |- r
+(define-rule ((ModusPonens p q) ctx r)
   (assert-in-context (=> p q))
   (assert-in-context p)
   (check-proof/defer
@@ -473,7 +483,7 @@
    (Branch
     (=>L (=> p q))
     I
-    I)))
+    Defer)))
 
 (module+ test
   ; modus ponens using checked =>L

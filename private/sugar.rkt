@@ -224,8 +224,10 @@
            (syntax-rules ()
              [(_ . pat)
               (struct-name (list . pat))])
-           (syntax-rules ()
-             [(_ p (... ...)) (struct-name (list p (... ...)))])))]))
+           (syntax-parser
+             [(_ p (... ...)) #'(struct-name (list p (... ...)))]
+             ; TODO variable like transformer
+             [_ #'(lambda args (struct-name args))])))]))
 
 (define-syntax define-quantifier
   (syntax-parser
