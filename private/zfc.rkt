@@ -7,7 +7,7 @@
          racket/set
          racket/struct)
 (module+ test (require rackunit))
-(provide)
+(provide (all-defined-out))
 
 ; operators
 

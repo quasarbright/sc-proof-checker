@@ -8,7 +8,7 @@
          racket/match
          (for-syntax racket/base))
 (module+ test (require rackunit))
-(provide)
+(provide (all-defined-out))
 
 ; operators
 (define zero 'zero)
