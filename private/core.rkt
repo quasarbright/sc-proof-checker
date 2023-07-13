@@ -15,7 +15,8 @@
  proof-tree?
  inference-tree?
  theory/c
- (except-out (struct-out theory) theory set-theory-theorems!)
+ (struct-out theory)
+ theorem?
  (struct-out rule)
  (contract-out
   ; constructors
@@ -24,6 +25,7 @@
   ; built-in rules
   [I rule/c]
   [Cut (-> formula/c* rule/c)]
+  [Theorem (-> proof? rule/c)]
   [ForgetLast rule/c]
   [Forget (-> formula/c* rule/c)]
   [RewindContext (-> context? rule/c)]
@@ -56,8 +58,7 @@
   [normal-name (-> natural? symbol?)]
   ; theories
   [theory->context (-> theory/c context?)]
-  [theory-add-theorem! (-> theory/c proof? inference-tree?)]
-  [rename make-theory theory (-> (listof formula/c*) theory/c)]))
+  [theorem-formula (-> theorem? formula/c*)]))
 
 (require racket/contract/base
          racket/match
@@ -182,8 +183,25 @@
 (define (Cut lemma)
   (rule (lambda (ctx p)
           (list (/- ctx lemma)
-                (/- (cons lemma ctx) p)))
+                (/- (extend-context ctx lemma) p)))
         'Cut))
+
+; ctx, theorem |- p
+; ----------------- Theorem
+; ctx |- p
+; Essentially a cut that takes in an already proven statement.
+; The theorem's proof must be valid under the current context.
+(define (Theorem proof)
+  (match proof
+    [(list (list proof-ctx theorem) tree)
+     (rule (lambda (ctx p)
+             (unless (subcontext? proof-ctx ctx)
+               (error 'Theorem "context of theorem must be a subcontext of current context"))
+             ; TODO find a way to prevent checking more than once while being safe
+             (check-proof proof-ctx theorem tree)
+             (list (/- (extend-context ctx theorem) p)))
+           'Theorem)]
+    [_ (error 'Theorem "expected a proof, but got ~v" proof)]))
 
 ; ctx |- q
 ; ---------- ForgetLast
@@ -264,14 +282,14 @@
                     '()))))
 
 ; A Theory is a
-(struct theory [axioms [theorems #:mutable]] #:transparent)
+(struct theory [axioms] #:transparent)
 (define theory/c
   (struct/c theory
-            (listof formula/c*)
-            (and/c (listof formula/c*))))
-; Theorems are assumed to be proven under the axioms.
-; Theorems may have free variables as long as they are free in the axioms (like zero in peano)
-(define (make-theory axioms) (theory axioms '()))
+            (listof formula/c*)))
+
+; A Theorem is a Proof
+(define theorem? proof?)
+; Represents a statement proven under a theory's axioms
 
 ; proof-checking
 
@@ -413,18 +431,11 @@
 
 ; theories
 
-; Theory Proof -> InferenceTree
-; check the proof of the theorem. If it is true, add it to the theory and return the inference tree.
-(define (theory-add-theorem! thry proof)
-  (match proof
-    [(list (list ctx p) tree)
-     ; TODO filter ctx in this check to those assumptions that were actually used?
-     (unless (subcontext? ctx (theory->context thry))
-       (error 'theory-add-theorem "proof of theorem must be valid under theory's context"))
-     (begin0 (check-proof ctx p tree)
-       (set-theory-theorems! thry (cons p (theory-theorems thry))))]))
-
 ; Theory -> Context
 (define (theory->context thry)
-  (context-union (apply context (theory-axioms thry))
-                 (apply context (theory-theorems thry))))
+  (context-union (apply context (theory-axioms thry))))
+
+; Theorem -> Formula
+(define (theorem-formula proof)
+  (match proof
+    [(list (list _ p) _) p]))

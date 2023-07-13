@@ -190,7 +190,7 @@
         Extensionality
         I))))))
 
-(define-theorem! singleton-unique-existence-theorem
+(define-theorem singleton-unique-existence-theorem
   zfc (forall x (exists! sx (is-singleton? x sx)))
   (ForallR
    (x)

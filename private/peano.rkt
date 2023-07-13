@@ -160,7 +160,7 @@
                     I
                     I))))))))))
 
-(define-theorem! additive-closure
+(define-theorem additive-closure
   peano (forall-nat (a b) (nat? (add a b)))
   (ForallNatR
    (a)
@@ -184,25 +184,26 @@
 ; --------------------------------- AddNat
 ; ctx |- (nat? (add a b))
 (define-rule (AddNat ctx (and p (nat? (add a b))))
-  (assert-in-context additive-closure)
   (check-proof/defer
    ctx p
-   (ForallL
-    additive-closure
-    (a)
-    (Branch
-     (=>L (inst additive-closure a))
-     (Sequence (RewindContext ctx)
-               Defer)
-     (ForallL
-      (forall-nat b (nat? (add a b)))
-      (b)
-      (Branch
-       (=>L (=> (nat? b) (nat? (add a b))))
-       (Sequence (RewindContext ctx) Defer)
-       I))))))
+   (Sequence
+    (Theorem additive-closure)
+    (ForallL
+     (theorem-formula additive-closure)
+     (a)
+     (Branch
+      (=>L (inst (theorem-formula additive-closure) a))
+      (Sequence (RewindContext ctx)
+                Defer)
+      (ForallL
+       (forall-nat b (nat? (add a b)))
+       (b)
+       (Branch
+        (=>L (=> (nat? b) (nat? (add a b))))
+        (Sequence (RewindContext ctx) Defer)
+        I)))))))
 
-(define-theorem! multiplicative-closure
+(define-theorem multiplicative-closure
   peano (forall-nat (a b) (nat? (mul a b)))
   (ForallNatR
    (a)
@@ -227,22 +228,23 @@
 ; --------------------------------- MulNat
 ; ctx |- (nat? (mul a b))
 (define-rule (MulNat ctx (and p (nat? (mul a b))))
-  (assert-in-context multiplicative-closure)
   (check-proof/defer
    ctx p
-   (ForallL
-    multiplicative-closure
-    (a)
-    (Branch
-     (=>L (inst multiplicative-closure a))
-     (Sequence (RewindContext ctx) Defer)
-     (ForallL
-      (forall-nat b (nat? (mul a b)))
-      (b)
-      (Branch
-       (=>L (=> (nat? b) (nat? (mul a b))))
-       (Sequence (RewindContext ctx) Defer)
-       I))))))
+   (Sequence
+    (Theorem multiplicative-closure)
+    (ForallL
+     (theorem-formula multiplicative-closure)
+     (a)
+     (Branch
+      (=>L (inst (theorem-formula multiplicative-closure) a))
+      (Sequence (RewindContext ctx) Defer)
+      (ForallL
+       (forall-nat b (nat? (mul a b)))
+       (b)
+       (Branch
+        (=>L (=> (nat? b) (nat? (mul a b))))
+        (Sequence (RewindContext ctx) Defer)
+        I)))))))
 
 ; checked auto rule for proving a natural
 ; pretty cool
@@ -257,12 +259,12 @@
       ctx p
       (Sequence SuccNat NatR))]
     [(mul _ _)
-     (assert-in-context multiplicative-closure)
+     ; TODO assert
      (check-proof/defer
       ctx p
       (Branch MulNat NatR NatR))]
     [(add _ _)
-     (assert-in-context additive-closure)
+     ; TODO assert
      (check-proof/defer
       ctx p
       (Branch AddNat NatR NatR))]
@@ -308,7 +310,7 @@
      (subst p n replacement)]
     [_ (error 'inst/nat "formula not a forall-nat: ~v" p)]))
 
-(define-theorem! additive-commutativity
+(define-theorem additive-commutativity
   peano (forall-nat a (forall-nat b (= (add a b) (add b a))))
   (Branch
    NatInduction
@@ -389,17 +391,17 @@
 ; ctx |- p
 ; NOTE (nat? a) and (nat? b) must be obvious in ctx
 (define-rule ((AddCommute a b) ctx p)
-  (assert-in-context additive-commutativity)
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL additive-commutativity (a b)
+    (Theorem additive-commutativity)
+    (ForallNatL (theorem-formula additive-commutativity) (a b)
                 (Sequence
                  (=L (add a b) (add b a))
                  (RewindContext ctx)
                  Defer)))))
 
-(define-theorem! additive-associativity
+(define-theorem additive-associativity
   peano (forall-nat a (forall-nat b (forall-nat c (= (add a (add b c))
                                                      (add (add a b) c)))))
   (Branch
@@ -446,11 +448,11 @@
 ; (add (add a b) c) ~> (add a (add b c))
 ; here the R suffix just means associate to the right
 (define-rule ((AddAssocR a b c) ctx p)
-  (assert-in-context additive-associativity)
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL additive-associativity (a b c)
+    (Theorem additive-associativity)
+    (ForallNatL (theorem-formula additive-associativity) (a b c)
                 (Sequence
                  (=L (add (add a b) c)
                      (add a (add b c)))
@@ -460,18 +462,18 @@
 ; (add a (add b c)) ~> (add (add a b) c)
 ; here the L suffix just means associate to the left
 (define-rule ((AddAssocL a b c) ctx p)
-  (assert-in-context additive-associativity)
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL additive-associativity (a b c)
+    (Theorem additive-associativity)
+    (ForallNatL (theorem-formula additive-associativity) (a b c)
                 (Sequence
                  (=L (add a (add b c))
                      (add (add a b) c))
                  (RewindContext ctx)
                  Defer)))))
 
-(define-theorem! multiplicative-commutativity
+(define-theorem multiplicative-commutativity
   peano (forall-nat a (forall-nat b (= (mul a b) (mul b a))))
   (Branch
    NatInduction
@@ -566,17 +568,17 @@
 
 ; (mul a b) ~> (mul b a)
 (define-rule ((MulCommute a b) ctx p)
-  (assert-in-context multiplicative-commutativity)
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL multiplicative-commutativity (a b)
+    (Theorem multiplicative-commutativity)
+    (ForallNatL (theorem-formula multiplicative-commutativity) (a b)
                 (Sequence
                  (=L (mul a b) (mul b a))
                  (RewindContext ctx)
                  Defer)))))
 
-(define-theorem! multiplicative-identity
+(define-theorem multiplicative-identity
   peano (forall-nat a (= (mul a (S zero)) a))
   (ForallNatR
    (a)
@@ -588,11 +590,11 @@
 
 ; (mul n 1) ~> n
 (define-rule ((MulOne n) ctx p)
-  (assert-in-context multiplicative-identity)
   (check-proof/defer
    ctx p
    (Sequence
-    (ForallNatL multiplicative-identity (n)
+    (Theorem multiplicative-identity)
+    (ForallNatL (theorem-formula multiplicative-identity) (n)
                 (Sequence
                  (=L (mul n (S zero))
                      n)
@@ -600,7 +602,7 @@
                  Defer)))))
 
 ; now we know for sure
-(define-theorem! one-plus-one-is-two
+(define-theorem one-plus-one-is-two
   peano (= (add (S zero) (S zero))
            (S (S zero)))
   (Sequence

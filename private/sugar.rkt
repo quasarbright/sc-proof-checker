@@ -41,7 +41,7 @@
   [TrustMe rule/c]
   [NoSubproofs! (-> rule/c rule/c)])
  (rename-out)
- define-theorem!)
+ define-theorem)
 
 ; utilities for defining rules
 
@@ -362,8 +362,8 @@
 
 ; theories
 
-(define-syntax-rule (define-theorem! name thry p proof-tree)
+(define-syntax-rule (define-theorem name thry p proof-tree)
   (define name
     (begin
-      (theory-add-theorem! thry (list (/- (theory->context thry) p) proof-tree))
-      p)))
+      (check-proof (theory->context thry) p proof-tree)
+      (list (/- (theory->context thry) p) proof-tree))))
