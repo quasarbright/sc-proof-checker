@@ -1,3 +1,4 @@
 sc-proof-checker
 ================
-README text here.
+
+A proof checker based on the sequent calculus. see the private directory for example usage.
